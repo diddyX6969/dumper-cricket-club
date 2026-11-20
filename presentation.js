@@ -1,6 +1,9 @@
 "use strict";
 // DCC presentation mode: a reliable same-browser demonstration, not a server-backed multiplayer service.
+const DEMO_DELETED_PREFIX="dcc-room-deleted-v1:";
 const demoOriginalRender=render;
+const demoOriginalPersist=persist;
+persist=function(){if(state.room?.code&&localStorage.getItem(DEMO_DELETED_PREFIX+state.room.code))return;demoOriginalPersist()};
 const demoOriginalMatch=simulateMatch;
 const demoMemberPrefix="dcc-demo-member-v2:";
 const demoFormats={
@@ -12,7 +15,7 @@ const demoFormats={
   "asia-cup-odi":["Asia Cup ODI","odi",50], "t10-league":["T10 League","t10",10],
   custom:["Custom Competition","custom",20]
 };
-const demoRead=(roomId)=>{const s=roomSnapshot(roomId);return s?.room?.code===roomId?s:null};
+const demoRead=(roomId)=>{if(localStorage.getItem(DEMO_DELETED_PREFIX+roomId))return null;const s=roomSnapshot(roomId);return s?.room?.code===roomId?s:null};
 function demoToken(code){const k=demoMemberPrefix+code;let t=sessionStorage.getItem(k);if(!t){t=crypto.randomUUID();sessionStorage.setItem(k,t)}return t}
 function demoRole(role,ownerId,roomCode){me={role,ownerId:ownerId||null,roomCode};saveSession()}
 function demoCommit(){if(!state.room)return;state.updatedAt=Date.now();localStorage.setItem(ROOM_PREFIX+state.room.code,JSON.stringify(state));render()}
@@ -158,26 +161,48 @@ simulateMatch=function(){
   }
 };
 window.addEventListener("storage",(e)=>{
+  if(e.key?.startsWith(DEMO_DELETED_PREFIX)&&e.newValue){
+    const deletedRoom=e.key.slice(DEMO_DELETED_PREFIX.length);
+    if(state.room?.code===deletedRoom){
+      logoutRoom().catch(console.warn);
+    }else{
+      renderMyRooms();
+    }
+    return;
+  }
   const roomId=state.room?.code;
   if(!roomId||e.key!==ROOM_PREFIX+roomId||!e.newValue)return;
+  if(localStorage.getItem(DEMO_DELETED_PREFIX+roomId))return;
   const updated=demoRead(roomId);
   if(!updated)return;
   state=migrateState(updated);render();
 });
 async function deleteSavedRoom(code){
-  const saved=findCreated(code);
-  if(!saved)return alert("This room is not stored on this browser.");
-  if(!confirm("Delete "+code+" and all its saved game data from this browser?"))return;
-  const wasCurrent=state.room?.code===code;
-  saveCreated(loadCreated().filter(r=>r.roomId!==code));
-  localStorage.removeItem(ROOM_PREFIX+code);
+  const roomId=String(code||"").trim().toUpperCase();
+  const saved=findCreated(roomId);
+  if(!saved){renderMyRooms();return alert("This room is not in Your Created Rooms on this browser.");}
+  if(!confirm("Permanently delete room "+roomId+" and all its saved squads, auction, matches and login codes from this browser?"))return false;
+
+  const wasCurrent=state.room?.code===roomId;
+  // Tombstone first. Other open tabs must exit and must never recreate deleted state.
+  localStorage.setItem(DEMO_DELETED_PREFIX+roomId,String(Date.now()));
+  saveCreated(loadCreated().filter(r=>r.roomId!==roomId));
+  localStorage.removeItem(ROOM_PREFIX+roomId);
   localStorage.removeItem(OFFLINE_CACHE_PREFIX+saved.playerCode);
-  if(wasCurrent){await logoutRoom()}else{renderMyRooms()}
+  localStorage.removeItem(MEMBER_PREFIX+saved.playerCode);
+
+  if(wasCurrent){
+    await logoutRoom();
+  }else{
+    renderMyRooms();
+  }
+  return true;
 }
-async function factoryReset(){
-  if(me.role!=="host"||!state.room)return alert("Only the room creator can delete the room.");
-  await deleteSavedRoom(state.room.code);
+async function deleteCurrentRoom(){
+  if(me.role!=="host"||!state.room?.code)return alert("Only the room creator can delete this room.");
+  return deleteSavedRoom(state.room.code);
 }
+async function factoryReset(){return deleteCurrentRoom()}
 (async function restorePresentationSession(){
   try{
     const saved=JSON.parse(sessionStorage.getItem(SESSION_KEY)||"null");
