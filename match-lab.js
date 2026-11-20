@@ -82,16 +82,16 @@ function simulateInnings(xi,fielders,limit,target,bias,inningsName){
   // Use an over-based bowling plan, with a bowlers' four-over limit in T20.
   const maxBowlerOvers=limit<=20?Math.max(1,Math.ceil(limit/5)):Math.max(1,Math.ceil(limit/5));
   const completedOvers=new Map();
+  let selectedBowler=null;
   while(balls<limit*6&&wickets<10&&(!target||runs<target)){
     if(!bats[striker])break;
     const over=Math.floor(balls/6);
-    let candidate=bowlers[over%bowlers.length];
-    if(balls%6===0){
+    if(balls%6===0 || !selectedBowler){
       const available=bowlers.filter(x=>(completedOvers.get(x.index)||0)<maxBowlerOvers);
-      candidate=available.length?available[over%available.length]:bowlerCandidates[over%bowlerCandidates.length];
+      selectedBowler=available.length?available[over%available.length]:bowlerCandidates[over%bowlerCandidates.length];
     }
-    const bowler=candidate.p;
-    const fig=figures[candidate.index];
+    const bowler=selectedBowler.p;
+    const fig=figures[selectedBowler.index];
     const batter=xi[striker];
     const bat=bats[striker];
     const battingRating=clamp(batter.bat + pitch.bat + bias,10,125);
@@ -118,7 +118,7 @@ function simulateInnings(xi,fielders,limit,target,bias,inningsName){
     }
     bat.b++;balls++;fig.b++;
     if(balls%6===0){
-      completedOvers.set(candidate.index,(completedOvers.get(candidate.index)||0)+1);
+      completedOvers.set(selectedBowler.index,(completedOvers.get(selectedBowler.index)||0)+1);
       [striker,nonStriker]=[nonStriker,striker];
       events.push(oversText(balls)+" ov · "+inningsName+" "+runs+"/"+wickets);
     }
