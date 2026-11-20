@@ -1,13 +1,27 @@
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let state=loadState(), me=JSON.parse(sessionStorage.getItem("dcc-me")||'{"role":null,"ownerId":null}');
-let timerHandle=null, netRoom=null, joinAction=null, replyAction=null, commandAction=null, stateAction=null, hostUserId=null, networkSelfId=null;
-let directoryRoom=null, directoryAction=null, directoryTimer=null;
-const directoryRooms=new Map(), adminUsers=new Set();
-const MASTER_HOST_HASH="e2650a398f9029c0f378a1a1af2032c71a2e9c3ab6b442ba3d17f42a53cd4310";
+const ROOM_INDEX_KEY="dcc-room-index-v6";
+const ROOM_STATE_PREFIX="dcc-room-state-v6:";
+const MEMBER_TOKEN_PREFIX="dcc-member-v6:";
+let state=blankState();
+let me=JSON.parse(sessionStorage.getItem("dcc-me-v6")||'{"role":null,"ownerId":null}');
+let activeRoomKey=sessionStorage.getItem("dcc-active-key-v6")||null;
+let timerHandle=null,netRoom=null,joinAction=null,replyAction=null,commandAction=null,stateAction=null,hostUserId=null,networkSelfId=null;
 
-
-function blankState(){return {room:null,players:structuredClone(PLAYER_SEED),franchises:[],auction:{playerId:null,bid:0,leader:null,running:false,endsAt:0},feed:[],pitch:null,toss:null,matches:[],stats:{},updatedAt:Date.now(),version:5}}
+function blankState(){return {room:null,players:structuredClone(PLAYER_SEED),franchises:[],auction:{playerId:null,bid:0,leader:null,running:false,endsAt:0},feed:[],pitch:null,toss:null,matches:[],stats:{},updatedAt:Date.now(),version:6}}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function money(v){v=Number(v||0);return v>=100?"₹"+(v/100).toFixed(v%100?2:0)+" Cr":"₹"+v+" L"}
+async function sha256(v){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(String(v)));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+function randomCode(n=6){const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";const a=new Uint32Array(n);crypto.getRandomValues(a);return [...a].map(v=>chars[v%chars.length]).join("")}
+function newRoomId(){return "DCC-"+randomCode(6)}
+function normalizeRoomId(v){return String(v||"").trim().toUpperCase()}
+function normalizeKey(v){return String(v||"").trim().toUpperCase().replace(/[^A-Z0-9]/g,"")}
+function getRoomIndex(){try{return JSON.parse(localStorage.getItem(ROOM_INDEX_KEY)||"[]")}catch{return []}}
+function setRoomIndex(rows){localStorage.setItem(ROOM_INDEX_KEY,JSON.stringify(rows))}
+function upsertRoomIndex(entry){const rows=getRoomIndex();const i=rows.findIndex(x=>x.code===entry.code);if(i>=0)rows[i]={...rows[i],...entry};else rows.unshift(entry);setRoomIndex(rows)}
+function roomStateKey(code){return ROOM_STATE_PREFIX+code}
+function saveRoomSnapshot(){if(state.room?.code)localStorage.setItem(roomStateKey(state.room.code),JSON.stringify(state))}
+function loadRoomSnapshot(code){try{const v=JSON.parse(localStorage.getItem(roomStateKey(code))||"null");return v&&v.room?migrateState(v):null}catch{return null}}
 function migrateState(s){
   if(!s||!Array.isArray(s.players))return blankState();
   const byName=new Map(s.players.map(p=>[String(p.name||"").toLowerCase(),p]));
@@ -17,196 +31,159 @@ function migrateState(s){
       if(existing.status==null)existing.status=seed.status;
       if(existing.sourceTeam==null)existing.sourceTeam=seed.sourceTeam;
       if(existing.previousSalary==null)existing.previousSalary=seed.previousSalary;
-    }else{
-      const add=structuredClone(seed);
-      s.players.push(add);byName.set(key,add);
-    }
+    }else s.players.push(structuredClone(seed));
   }
-  if(s.room&&!Array.isArray(s.room.userCodes))s.room.userCodes=[];
-  if(s.room&&!s.room.hostChallenge)s.room.hostChallenge=crypto.randomUUID();
-  s.version=5;
-  return s;
+  s.version=6;return s;
 }
-function loadState(){try{const saved=JSON.parse(localStorage.getItem("dcc-state-v3"));return saved?migrateState(saved):blankState()}catch{return blankState()}}
-function saveLocal(){localStorage.setItem("dcc-state-v3",JSON.stringify(state));sessionStorage.setItem("dcc-me",JSON.stringify(me))}
-function setMe(v){me=v;sessionStorage.setItem("dcc-me",JSON.stringify(v))}
-function enc(s){return btoa(unescape(encodeURIComponent(String(s))))}
-function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function money(v){v=Number(v||0);return v>=100?"₹"+(v/100).toFixed(v%100?2:0)+" Cr":"₹"+v+" L"}
-function code(){return "DCC-"+Math.random().toString(36).slice(2,7).toUpperCase()}
-function showHostLogin(){$("#hostLoginBox").classList.remove("hidden");$("#userLoginBox").classList.add("hidden")}
-function showUserLogin(){$("#userLoginBox").classList.remove("hidden");$("#hostLoginBox").classList.add("hidden")}
-async function sha256(v){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(String(v)));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
-async function hostLogin(){
-  const key=$("#hostKeyInput").value.trim();
-  if(!key||await sha256(key)!==MASTER_HOST_HASH)return alert("Invalid host key.");
-  sessionStorage.setItem("dcc-host-auth","1");
-  sessionStorage.setItem("dcc-host-secret",key);
-  setMe({role:"superhost",ownerId:null});
-  $("#landing").classList.remove("active");$("#hostHub").classList.add("active");
-  await startDirectory();renderLiveRooms();
+function memberToken(roomCode){
+  const k=MEMBER_TOKEN_PREFIX+roomCode;
+  let t=localStorage.getItem(k);if(!t){t=crypto.randomUUID();localStorage.setItem(k,t)}return t
 }
-async function hostLogout(){
-  sessionStorage.removeItem("dcc-host-auth");sessionStorage.removeItem("dcc-host-secret");setMe({role:null,ownerId:null});
-  try{await directoryRoom?.leave()}catch{} directoryRoom=null;directoryAction=null;clearInterval(directoryTimer);
-  $("#hostHub").classList.remove("active");$("#landing").classList.add("active");setNet("OFFLINE");
-}
+function setMe(v){me=v;sessionStorage.setItem("dcc-me-v6",JSON.stringify(v))}
+function saveSession(){sessionStorage.setItem("dcc-me-v6",JSON.stringify(me));if(activeRoomKey)sessionStorage.setItem("dcc-active-key-v6",activeRoomKey);else sessionStorage.removeItem("dcc-active-key-v6")}
+function showCreate(){$("#createBox")?.classList.remove("hidden");$("#joinBox")?.classList.add("hidden")}
+function showJoin(){$("#joinBox")?.classList.remove("hidden");$("#createBox")?.classList.add("hidden")}
 function tab(id){$$(".panel").forEach(x=>x.classList.toggle("active",x.id===id))}
-function enterGame(){$("#landing").classList.remove("active");$("#hostHub")?.classList.remove("active");$("#game").classList.add("active");$("#logoutBtn")?.classList.remove("hidden");render()}
-function hostOnly(){if(!["host","admin"].includes(me.role)){alert("Host-only control.");return false}return true}
-
+function enterGame(){$("#landing")?.classList.remove("active");$("#game")?.classList.add("active");$("#logoutBtn")?.classList.remove("hidden");render()}
+function hostOnly(){if(me.role!=="host"){alert("Only the room creator can use this control.");return false}return true}
 function ownerBy(id){return state.franchises.find(f=>f.id===id)}
 function currentPlayer(){return state.players.find(p=>p.id===state.auction.playerId)}
 function availablePlayers(){return state.players.filter(p=>p.active&&p.owner===null)}
-function publicState(){const s=structuredClone(state);if(s.room)delete s.room.hostPass;return s}
+function publicState(){const out=structuredClone(state);if(out.room)delete out.room.keyHash;return out}
 function persist(){
-  state.updatedAt=Date.now();saveLocal();
+  state.updatedAt=Date.now();saveRoomSnapshot();saveSession();
   if(me.role==="host"&&stateAction)stateAction.send(publicState()).catch(()=>{});
-  else if(me.role==="admin"&&commandAction&&hostUserId)commandAction.send({type:"adminReplaceState",state:publicState()},{target:hostUserId}).catch(()=>{});
-  if(me.role==="host")announceRoom();
   render();
 }
 function setNet(text,ok=false){const el=$("#netBadge");if(!el)return;el.textContent=text;el.classList.toggle("online",ok)}
 
-async function startDirectory(){
-  if(directoryRoom)return;
-  try{
-    const {joinRoom}=await import("https://esm.run/trystero");
-    directoryRoom=joinRoom({appId:"diddyx6969/dcc-directory-v1",password:"dcc-live-directory",identity:"none"},"dcc-live-rooms");
-    directoryAction=directoryRoom.makeAction("room-live");
-    directoryAction.onMessage(data=>{
-      if(!data?.code)return;
-      directoryRooms.set(data.code,{...data,lastSeen:Date.now()});renderLiveRooms();
-    });
-    directoryTimer=setInterval(()=>{
-      const now=Date.now();for(const [k,v] of directoryRooms)if(now-v.lastSeen>14000)directoryRooms.delete(k);
-      if(me.role==="host"&&state.room)announceRoom();
-      renderLiveRooms();
-    },4000);
-    if(me.role==="host"&&state.room)announceRoom();
-  }catch(e){console.warn("Directory unavailable",e)}
+function renderMyRooms(){
+  const card=$("#myRoomsCard"),el=$("#myRooms");if(!card||!el)return;
+  const rooms=getRoomIndex();
+  card.classList.toggle("hidden",rooms.length===0);
+  el.innerHTML=rooms.map(r=>"<div class='roomCard'><div><b>"+esc(r.code)+"</b><span>"+esc(r.hostName||"Host")+" • Key "+esc(r.key)+"</span></div><div class='actions'><button onclick=\"openCreatedRoom('"+r.code+"')\">Open</button><button class='danger' onclick=\"forgetCreatedRoom('"+r.code+"')\">Forget</button></div></div>").join("");
 }
-function announceRoom(){
-  if(!directoryAction||me.role!=="host"||!state.room)return;
-  directoryAction.send({code:state.room.code,hostName:state.room.hostName,teams:state.franchises.length,matches:state.matches.length,createdAt:state.room.createdAt||Date.now(),challenge:state.room.hostChallenge}).catch(()=>{});
+async function openCreatedRoom(code){
+  const meta=getRoomIndex().find(x=>x.code===code);const snap=loadRoomSnapshot(code);
+  if(!meta||!snap)return alert("This room's saved data is not available on this device.");
+  state=snap;activeRoomKey=meta.key;setMe({role:"host",ownerId:"host",roomCode:code});saveSession();enterGame();
+  await connectNetwork(code,meta.key,true);if(state.auction.running)runTimer();
 }
-function renderLiveRooms(){
-  const el=$("#liveRooms");if(!el)return;
-  const rooms=[...directoryRooms.values()].sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0));
-  el.innerHTML=rooms.length?rooms.map(r=>"<div class='roomCard'><div><b>"+esc(r.code)+"</b><span>"+esc(r.hostName||"Host")+" • "+Number(r.teams||0)+" teams • "+Number(r.matches||0)+" matches</span></div><button onclick=\"joinAsHost('"+esc(r.code)+"')\">Join as Host</button></div>").join(""):"<span class='muted'>No online rooms found yet.</span>";
-}
-async function joinAsHost(roomCode){
-  if(sessionStorage.getItem("dcc-host-auth")!=="1")return alert("Host login required.");
-  const room=directoryRooms.get(roomCode),secret=sessionStorage.getItem("dcc-host-secret");
-  if(!room?.challenge||!secret)return alert("Room host proof is unavailable. Refresh the host centre.");
-  setMe({role:"admin",ownerId:"admin"});
-  const ok=await connectNetwork(roomCode,false);if(!ok)return;
-  const proof=await sha256(secret+":"+room.challenge+":"+networkSelfId);
-  await joinAction.send({roomCode,admin:true,adminProof:proof});
-  setTimeout(()=>{if(me.role==="admin"&&state.room?.code!==roomCode)alert("Could not connect to that room.")},7000);
+function forgetCreatedRoom(code){
+  const rows=getRoomIndex().filter(x=>x.code!==code);setRoomIndex(rows);localStorage.removeItem(roomStateKey(code));renderMyRooms();
 }
 
-async function connectNetwork(roomCode,isHost){
+async function connectNetwork(roomCode,roomKey,isHost){
   setNet("CONNECTING");
   try{
     const {joinRoom}=await import("https://esm.run/trystero");
     if(netRoom)try{await netRoom.leave()}catch{}
-    netRoom=joinRoom({appId:"diddyx6969/dumper-cricket-club-v4",password:roomCode,identity:"none"},roomCode);
+    const networkPassword=await sha256(roomCode+":"+roomKey);
+    netRoom=joinRoom({appId:"diddyx6969/dumper-cricket-club-v6",password:networkPassword,identity:"none"},roomCode);
     const self=await netRoom.getSelf();networkSelfId=self.userId;
-    joinAction=netRoom.makeAction("dcc-join");
+    joinAction=netRoom.makeAction("dcc-login");
     replyAction=netRoom.makeAction("dcc-reply");
-    commandAction=netRoom.makeAction("dcc-cmd");
+    commandAction=netRoom.makeAction("dcc-command");
     stateAction=netRoom.makeAction("dcc-state");
 
     joinAction.onMessage((data,ctx)=>{if(me.role==="host")handleJoinRequest(data,ctx.userId)});
     replyAction.onMessage((data,ctx)=>{
-      if(!data?.ok)return;
-      hostUserId=ctx.userId;state=data.state;
-      if(data.admin){
-        setMe({role:"admin",ownerId:"admin"});saveLocal();setNet("HOST ADMIN",true);enterGame();return;
-      }
-      if(me.role==="host")return;
-      setMe({role:"owner",ownerId:data.ownerId,accessCode:data.accessCode});
-      saveLocal();setNet("CONNECTED",true);enterGame();
+      if(me.role==="host"||!data?.ok)return;
+      hostUserId=ctx.userId;state=migrateState(data.state);saveRoomSnapshot();
+      if(data.ownerId)setMe({role:"owner",ownerId:data.ownerId,roomCode});
+      else setMe({role:"member",ownerId:null,roomCode});
+      saveSession();setNet("CONNECTED",true);enterGame();
     });
     commandAction.onMessage((data,ctx)=>{if(me.role==="host")handleRemoteCommand(data,ctx.userId)});
     stateAction.onMessage((incoming,ctx)=>{
-      if(me.role==="host")return;
-      if(hostUserId&&ctx.userId!==hostUserId)return;
-      hostUserId=ctx.userId;state=incoming;saveLocal();render();
+      if(me.role==="host")return;if(hostUserId&&ctx.userId!==hostUserId)return;
+      hostUserId=ctx.userId;state=migrateState(incoming);saveRoomSnapshot();render();
     });
-    netRoom.onUserJoin(()=>{if(me.role==="host"){setNet("ONLINE",true);announceRoom()}});
-    netRoom.onUserLeave(({userId})=>{if(me.role==="host"){const f=state.franchises.find(x=>x.userId===userId);if(f){f.online=false;state.feed.unshift(f.team+" disconnected.");persist()}}});
+    netRoom.onUserLeave(({userId})=>{
+      if(me.role!=="host")return;
+      const f=state.franchises.find(x=>x.userId===userId);if(f){f.online=false;state.feed.unshift(f.team+" disconnected.");persist()}
+    });
     netRoom.onError(err=>{console.warn(err);setNet("NETWORK ISSUE")});
     if(isHost){
-      hostUserId=self.userId;state.room.hostUserId=self.userId;setNet("HOST ONLINE",true);persist();await startDirectory();announceRoom();
-    }else setNet("FINDING HOST");
+      hostUserId=self.userId;state.room.hostUserId=self.userId;setNet("HOST ONLINE",true);persist();
+    }else setNet("FINDING ROOM");
     return true;
-  }catch(e){console.error(e);setNet("NETWORK ERROR");alert("Could not start room networking. Check internet access and reload.");return false}
+  }catch(e){console.error(e);setNet("NETWORK ERROR");alert("Could not connect to the room network. Check your internet connection.");return false}
 }
 
 async function createRoom(){
-  if(sessionStorage.getItem("dcc-host-auth")!=="1")return alert("Host login required.");
-  const name=$("#hostName").value.trim();if(!name)return alert("Enter creator name.");
-  state=blankState();
-  state.room={code:code(),hostName:name,startPurse:Math.max(1,Number($("#startPurse").value||120))*100,createdAt:Date.now(),userCodes:[],hostChallenge:crypto.randomUUID()};
-  setMe({role:"host",ownerId:"host"});saveLocal();enterGame();
-  await connectNetwork(state.room.code,true);announceRoom();
+  const hostName=($("#hostName")?.value||"").trim()||"Host";
+  const purse=Math.max(1,Number($("#startPurse")?.value||120))*100;
+  let code;do{code=newRoomId()}while(getRoomIndex().some(x=>x.code===code));
+  const key=randomCode(6);
+  state=blankState();state.room={code,hostName,startPurse:purse,createdAt:Date.now(),keyHash:await sha256(key)};
+  activeRoomKey=key;upsertRoomIndex({code,key,hostName,createdAt:state.room.createdAt});
+  setMe({role:"host",ownerId:"host",roomCode:code});saveRoomSnapshot();saveSession();enterGame();
+  await connectNetwork(code,key,true);
 }
+
 async function joinRoom(){
-  const roomCode=$("#joinCode").value.trim().toUpperCase(),accessCode=$("#userLoginCode").value.trim();
-  if(!roomCode||!/^[0-9]{6}$/.test(accessCode))return alert("Enter Room ID and your 6-digit login code.");
-  setMe({role:"guest",ownerId:null});
-  const ok=await connectNetwork(roomCode,false);if(!ok)return;
-  await joinAction.send({roomCode,accessCode});
-  setTimeout(()=>{if(me.role==="guest")alert("Room not found or login code was not accepted. Make sure the creator is online.")},8000);
+  const roomCode=normalizeRoomId($("#joinCode")?.value),key=normalizeKey($("#roomKeyInput")?.value);
+  if(!/^DCC-[A-Z0-9]{6}$/.test(roomCode))return alert("Enter a valid Room ID, for example DCC-A7K9P2.");
+  if(!/^[A-Z0-9]{6}$/.test(key))return alert("Room Key must be exactly 6 letters/numbers.");
+  state=blankState();state.room={code:roomCode,hostName:"",startPurse:0,createdAt:0};
+  activeRoomKey=key;setMe({role:"guest",ownerId:null,roomCode});saveSession();
+  const ok=await connectNetwork(roomCode,key,false);if(!ok)return;
+  const keyHash=await sha256(key);
+  await joinAction.send({roomCode,keyHash,memberToken:memberToken(roomCode)});
+  setTimeout(()=>{if(me.role==="guest")alert("Room not found. Check the Room ID and Room Key, and make sure the creator has the room open.")},8000);
 }
 
 async function handleJoinRequest(data,userId){
   if(!state.room||data.roomCode!==state.room.code)return;
-  if(data.admin){
-    const secret=sessionStorage.getItem("dcc-host-secret");
-    const expected=secret&&state.room.hostChallenge?await sha256(secret+":"+state.room.hostChallenge+":"+userId):"";
-    if(!expected||data.adminProof!==expected){replyAction.send({ok:false,error:"Invalid host key"},{target:userId});return}
-    adminUsers.add(userId);
-    replyAction.send({ok:true,admin:true,state:publicState()},{target:userId});return;
-  }
-  const codeRec=(state.room.userCodes||[]).find(x=>x.code===String(data.accessCode)&&x.active!==false);
-  if(!codeRec){replyAction.send({ok:false,error:"Invalid or revoked code"},{target:userId});return}
-  let f=codeRec.franchiseId?state.franchises.find(x=>x.id===codeRec.franchiseId):null;
-  if(!f){
-    if(state.franchises.some(x=>x.team.toLowerCase()===String(codeRec.team).toLowerCase())){replyAction.send({ok:false,error:"Franchise already exists"},{target:userId});return}
-    f={id:crypto.randomUUID(),accessCode:codeRec.code,owner:codeRec.owner,team:codeRec.team,purse:state.room.startPurse,userId,online:true,joinedAt:Date.now()};
-    codeRec.franchiseId=f.id;codeRec.usedAt=Date.now();state.franchises.push(f);state.feed.unshift("🏏 "+f.team+" joined the room.");
-  }else{f.userId=userId;f.online=true}
-  persist();
-  replyAction.send({ok:true,ownerId:f.id,accessCode:codeRec.code,state:publicState()},{target:userId});
+  if(!data.keyHash||data.keyHash!==state.room.keyHash)return;
+  const existing=state.franchises.find(x=>x.memberToken===data.memberToken);
+  if(existing){existing.userId=userId;existing.online=true;persist();replyAction.send({ok:true,ownerId:existing.id,state:publicState()},{target:userId});return}
+  replyAction.send({ok:true,ownerId:null,state:publicState()},{target:userId});
+}
+
+function registerFranchise(){
+  if(me.role!=="member")return;
+  const owner=($("#memberOwnerName")?.value||"").trim(),team=($("#memberTeamName")?.value||"").trim();
+  if(!owner||!team)return alert("Enter your name and franchise name.");
+  if(!commandAction||!hostUserId)return alert("Not connected to the room creator.");
+  commandAction.send({type:"register",owner,team,memberToken:memberToken(state.room.code)},{target:hostUserId});
 }
 function handleRemoteCommand(data,userId){
-  if(adminUsers.has(userId)){
-    if(data.type==="adminReplaceState"&&data.state?.players&&data.state?.franchises&&data.state?.auction){
-      state=data.state;state.feed.unshift("⚙️ Host admin updated room controls.");persist();
-    }
-    return;
+  if(data.type==="register"){
+    const owner=String(data.owner||"").trim(),team=String(data.team||"").trim();
+    if(!owner||!team||!data.memberToken)return;
+    if(state.franchises.some(x=>x.team.toLowerCase()===team.toLowerCase())){replyAction.send({ok:false,error:"Team name already exists"},{target:userId});return}
+    let f=state.franchises.find(x=>x.memberToken===data.memberToken);
+    if(!f){f={id:crypto.randomUUID(),memberToken:data.memberToken,owner,team,purse:state.room.startPurse,userId,online:true,joinedAt:Date.now()};state.franchises.push(f)}
+    else{f.owner=owner;f.team=team;f.userId=userId;f.online=true}
+    state.feed.unshift("🏏 "+f.team+" joined the room.");persist();
+    replyAction.send({ok:true,ownerId:f.id,state:publicState()},{target:userId});return;
   }
   const f=state.franchises.find(x=>x.id===data.ownerId&&x.userId===userId);if(!f)return;
-  if(data.type==="bid"){processBid(f.id);return}
+  if(data.type==="bid")processBid(f.id);
 }
+function sendCommand(data){if(!commandAction||!hostUserId)return alert("Not connected to the room creator.");commandAction.send({...data,ownerId:me.ownerId},{target:hostUserId})}
 
-function sendCommand(data){if(!commandAction||!hostUserId)return alert("Not connected to host.");commandAction.send({...data,ownerId:me.ownerId},{target:hostUserId})}
-
-function copyRoom(){navigator.clipboard?.writeText(state.room?.code||"");}
+function copyRoom(){navigator.clipboard?.writeText(state.room?.code||"")}
+function copyRoomInvite(){
+  if(!hostOnly())return;
+  const meta=getRoomIndex().find(x=>x.code===state.room.code),key=meta?.key||activeRoomKey||"";
+  navigator.clipboard?.writeText("Room ID: "+state.room.code+"\nRoom Key: "+key);
+}
+async function rotateRoomKey(){
+  if(!hostOnly())return;
+  if(!confirm("Generate a new Room Key? Connected players will need to join again with the new key."))return;
+  const key=randomCode(6);state.room.keyHash=await sha256(key);activeRoomKey=key;
+  upsertRoomIndex({code:state.room.code,key,hostName:state.room.hostName,createdAt:state.room.createdAt});
+  saveRoomSnapshot();saveSession();await connectNetwork(state.room.code,key,true);render();
+}
 async function logoutRoom(){
-  const wasHost=["host","admin"].includes(me.role);
-  try{await netRoom?.leave()}catch{} netRoom=null;hostUserId=null;adminUsers.clear();
-  $("#game")?.classList.remove("active");$("#logoutBtn")?.classList.add("hidden");setNet("OFFLINE");
-  if(wasHost&&sessionStorage.getItem("dcc-host-auth")==="1"){
-    setMe({role:"superhost",ownerId:null});$("#hostHub")?.classList.add("active");await startDirectory();renderLiveRooms();
-  }else{
-    setMe({role:null,ownerId:null});$("#landing")?.classList.add("active");
-  }
-  render();
+  try{await netRoom?.leave()}catch{} netRoom=null;hostUserId=null;networkSelfId=null;
+  state=blankState();activeRoomKey=null;sessionStorage.removeItem("dcc-me-v6");sessionStorage.removeItem("dcc-active-key-v6");setMe({role:null,ownerId:null});
+  $("#game")?.classList.remove("active");$("#landing")?.classList.add("active");$("#logoutBtn")?.classList.add("hidden");setNet("OFFLINE");renderMyRooms();
 }
+
 function renderAuctionSelect(){
   const q=($("#auctionSearch")?.value||"").trim().toLowerCase(),sel=$("#playerSelect");if(!sel)return;
   const old=sel.value;sel.innerHTML=availablePlayers().filter(p=>!q||p.name.toLowerCase().includes(q)||p.iplTeam.toLowerCase().includes(q)||String(p.sourceTeam||"").toLowerCase().includes(q)||String(p.status||"").toLowerCase().includes(q)).map(p=>"<option value='"+p.id+"'>"+esc(p.name)+" • "+p.iplTeam+" • "+money(p.basePrice)+"</option>").join("");
