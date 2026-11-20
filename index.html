@@ -15,85 +15,33 @@
 <main>
 <section id="landing" class="view active">
   <div class="hero card">
-    <div class="eyebrow">DUMPER CRICKET CLUB</div>
-    <h2>Start a room. Invite players. Run the auction.</h2>
-    <p class="hero-explain">There are only two things you can do here. Create a new room, or join an existing room.</p>
-    <div class="entry-actions">
-      <button class="entry-button create-entry" onclick="showCreate()">
-        <span class="entry-number">1</span>
-        <span><b>Create Room</b><small>I am starting a new auction room</small></span>
-      </button>
-      <button class="entry-button join-entry" onclick="showJoinChoice()">
-        <span class="entry-number">2</span>
-        <span><b>Join Room</b><small>I already received a login code</small></span>
-      </button>
-    </div>
+    <div class="eyebrow">DCC • LIVE CRICKET AUCTION & MATCH ROOM</div>
+    <h2>Build your squad. Win the room.</h2>
+    <p>Create a room, bring in franchise owners, run a live player auction, then play out a full cricket league with pitches, tosses, XIs, formats, commentary, standings and awards.</p>
+    <div class="actions"><button onclick="showCreate()">Create Room</button><button class="secondary" onclick="showJoin()">Join Room</button></div>
   </div>
 
-  <div id="createBox" class="card hidden flow-card">
-    <button class="back-link" onclick="backHome()">← Back</button>
-    <div class="flow-head"><span class="flow-icon">🏏</span><div><div class="eyebrow">FOR THE ROOM CREATOR</div><h2>Create a New Room</h2></div></div>
-    <p class="flow-help">You become the Host automatically. DCC will generate all login codes for you.</p>
-    <label>Host display name <span class="muted">(optional)</span><input id="hostName" placeholder="Host"></label>
-    <label>Starting purse per team (₹ Cr)<input id="startPurse" type="number" min="1" value="120"></label>
-    <button class="big-action" onclick="createRoom()">Create Room & Generate Codes</button>
+  <div id="createBox" class="card hidden narrow">
+    <h3>Create Room</h3>
+    <label>Host name<input id="hostName" placeholder="Host name"></label>
+    <label>Host ID<input id="hostId" placeholder="admin"></label>
+    <label>Host password<input id="hostPass" type="password"></label>
+    <label>Starting purse (₹ Cr)<input id="startPurse" type="number" min="1" value="120"></label>
+    <button onclick="createRoom()">Create DCC Room</button>
   </div>
 
-  <div id="createdBox" class="card hidden flow-card">
-    <div class="success-mark">✓ ROOM CREATED</div>
-    <h2>Your Room is Ready</h2>
-    <p class="flow-help">Keep the Host details private. Send only the Player Joining Code to your players.</p>
-    <div class="credential-stack">
-      <div class="credential host-credential">
-        <div><span>HOST LOGIN — PRIVATE</span><strong id="createdRoomId">—</strong><small>Room ID</small></div>
-        <div><strong id="createdHostKey">—</strong><small>6-character Host Key</small></div>
-      </div>
-      <div class="credential player-credential">
-        <div><span>SHARE THIS WITH PLAYERS</span><strong id="createdPlayerCode">—</strong><small>10-character Player Joining Code</small></div>
-        <button onclick="copyPlayerCode()">Copy Player Code</button>
-      </div>
-    </div>
-    <button class="big-action gold" onclick="enterCreatedRoom()">Enter Room as Host</button>
+  <div id="joinBox" class="card hidden narrow">
+    <h3>Join Room</h3>
+    <label>Room code<input id="joinCode" placeholder="DCC-AB12"></label>
+    <label>Your ID<input id="joinId" placeholder="owner-id"></label>
+    <label>Password<input id="joinPass" type="password"></label>
+    <label>Your name<input id="ownerName" placeholder="Owner name"></label>
+    <label>Franchise name<input id="teamName" placeholder="Team name"></label>
+    <button onclick="joinRoom()">Join Room</button>
+    <p class="muted mini">Enter the room code from the host. Connection happens automatically.</p>
   </div>
 
-  <div id="joinChoiceBox" class="card hidden flow-card">
-    <button class="back-link" onclick="backHome()">← Back</button>
-    <div class="eyebrow">JOIN AN EXISTING ROOM</div>
-    <h2>Who are you?</h2>
-    <p class="flow-help">Choose Player if someone invited you. Choose Host only if you have the private Host Key.</p>
-    <div class="role-choice">
-      <button class="role-card player-role" onclick="showPlayerLogin()">
-        <span class="role-emoji">👤</span><b>Player</b><small>I received a 10-character Player Joining Code</small>
-      </button>
-      <button class="role-card host-role" onclick="showHostLogin()">
-        <span class="role-emoji">👑</span><b>Host</b><small>I have the Room ID + 6-character Host Key</small>
-      </button>
-    </div>
-  </div>
-
-  <div id="playerLoginBox" class="card hidden flow-card narrow">
-    <button class="back-link" onclick="showJoinChoice()">← Back</button>
-    <div class="flow-head"><span class="flow-icon">👤</span><div><div class="eyebrow">PLAYER LOGIN</div><h2>Enter Player Code</h2></div></div>
-    <p class="flow-help"><b>Only one thing is needed.</b> Paste the 10-character code the room creator sent you.</p>
-    <label>Player Joining Code<input id="playerJoinCodeInput" maxlength="10" placeholder="K7M4X9P2QA" autocomplete="off"></label>
-    <button class="big-action" onclick="joinAsPlayer()">Join as Player</button>
-  </div>
-
-  <div id="hostLoginBox" class="card hidden flow-card narrow">
-    <button class="back-link" onclick="showJoinChoice()">← Back</button>
-    <div class="flow-head"><span class="flow-icon">👑</span><div><div class="eyebrow">HOST LOGIN</div><h2>Enter Host Details</h2></div></div>
-    <p class="flow-help">Use the private details generated when this room was created.</p>
-    <label>Room ID<input id="hostRoomIdInput" placeholder="DCC-A7K9P2" autocomplete="off"></label>
-    <label>6-character Host Key<input id="hostKeyInput" maxlength="6" placeholder="Q8M4X2" autocomplete="off"></label>
-    <button class="big-action gold" onclick="joinAsHost()">Enter as Host</button>
-  </div>
-
-  <div id="myRoomsCard" class="card hidden">
-    <div class="section-title"><div><div class="eyebrow">ROOMS CREATED ON THIS DEVICE</div><h3>Your Rooms</h3></div></div>
-    <p class="muted mini">Use Open as Host to reopen a room you created here.</p>
-    <div id="myRooms" class="room-list"></div>
-  </div>
-</section>
+  </section>
 
 <section id="game" class="view">
   <nav class="tabs">
@@ -106,17 +54,8 @@
   </nav>
 
   <div id="lobby" class="panel active">
-    <div id="roleBanner" class="role-banner"></div>
-    <div id="memberSetupCard" class="card hidden narrow">
-      <div class="eyebrow">FIRST TIME IN THIS ROOM</div>
-      <h3>Create Your Franchise</h3>
-      <p class="muted mini">Room login is already complete. These details are only for your team inside the game.</p>
-      <label>Your name<input id="memberOwnerName" placeholder="Owner name"></label>
-      <label>Franchise name<input id="memberTeamName" placeholder="Team name"></label>
-      <button class="big-action" onclick="registerFranchise()">Create Franchise</button>
-    </div>
     <div class="grid2">
-      <div class="card"><div class="eyebrow">ROOM</div><h2 id="roomTitle">—</h2><div id="roomInfo"></div><div id="hostLobbyControls" class="actions"><button class="secondary" onclick="copyRoomInvite()">Copy Room Login</button><button class="secondary" onclick="exportLeague()">Export League</button></div></div>
+      <div class="card"><div class="eyebrow">ROOM</div><h2 id="roomTitle">—</h2><div id="roomInfo"></div><div class="actions"><button class="secondary" onclick="copyRoom()">Copy Room Code</button><button class="secondary" onclick="exportLeague()">Export League</button></div></div>
       <div class="card"><div class="eyebrow">CONNECTED FRANCHISES</div><div id="franchiseList"></div></div>
     </div>
     <div class="card"><h3>League Pulse</h3><div id="leaguePulse" class="stats-grid"></div></div>
@@ -145,9 +84,9 @@
   <div id="squads" class="panel"><div class="card"><div class="section-title"><h3>Franchise Squads</h3><span id="soldCounter" class="muted"></span></div><div id="squadGrid" class="cards"></div></div></div>
 
   <div id="match" class="panel">
-    <div id="matchHostControls" class="grid2">
+    <div class="grid2">
       <div class="card">
-        <h3>Host Match Setup</h3>
+        <h3>Match Setup</h3>
         <label>Team A<select id="teamA" onchange="fillXI()"></select></label>
         <label>Team B<select id="teamB" onchange="fillXI()"></select></label>
         <label>Format<select id="format" onchange="formatChanged()"><option value="ipl">IPL / T20</option><option value="t20">T20</option><option value="odi">ODI</option><option value="test">Test</option><option value="t10">T10</option><option value="custom">Custom Overs</option></select></label>
@@ -192,12 +131,6 @@
     </div>
     <div class="grid2">
       <div class="card"><h3>Franchise Control</h3><label>Franchise<select id="adminTeam" onchange="loadTeamEditor()"></select></label><label>Team name<input id="adminTeamName"></label><label>Owner name<input id="adminOwnerName"></label><label>Purse ₹L<input id="adminPurse" type="number"></label><div class="actions"><button onclick="saveTeamEdit()">Save Team</button><button class="danger" onclick="removeTeam()">Remove Team</button></div></div>
-      <div class="card">
-        <h3>Room Login Codes</h3>
-        <p class="muted mini">Keep Host Login private. Share only the Player Joining Code with players.</p>
-        <div class="access-pair three"><div><span>Room ID</span><code id="adminRoomId">—</code></div><div><span>Host Key</span><code id="adminHostKey">—</code></div><div><span>Player Joining Code</span><code id="adminPlayerCode">—</code></div></div>
-        <div class="actions"><button onclick="copyPlayerCode()">Copy Player Code</button><button class="secondary" onclick="rotatePlayerCode()">Generate New Player Code</button></div>
-      </div>
       <div class="card"><h3>League Control</h3><div class="actions"><button class="secondary" onclick="resetAuctionState()">Reset Auction State</button><button class="secondary" onclick="document.getElementById('importFile').click()">Import League</button><input id="importFile" class="hidden" type="file" accept=".json" onchange="importLeague(event)"><button class="danger" onclick="factoryReset()">Factory Reset</button></div><p class="muted mini">Room-control changes are shared with every connected franchise.</p></div>
     </div>
   </div>
