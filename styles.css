@@ -78,17 +78,6 @@ button,input,select,textarea{font:inherit}
   letter-spacing:.05em;
 }
 .badge.online{background:#155937;color:#b9ffd0;border-color:#55b87e}
-.sfx-toggle{
-  padding:8px 11px;
-  border:1px solid #5f7f68;
-  background:#173c29;
-  color:#eaf5ec;
-  font-size:12px;
-}
-.sfx-toggle.off{
-  opacity:.58;
-  filter:saturate(.4);
-}
 .logout{
   padding:8px 11px;
   border:1px solid #7f3a36;
