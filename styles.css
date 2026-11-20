@@ -381,3 +381,10 @@ footer{text-align:center;padding:30px;color:#728c7a;font-size:12px}
 .codeRow.revoked{opacity:.48}
 .codeRow .actions{margin:0}
 @media(max-width:700px){.login-choice{grid-template-columns:1fr}.roomCard{align-items:stretch;flex-direction:column}.roomCard button{width:100%}.codeRow{grid-template-columns:1fr}.codeRow code{font-size:26px}}
+
+.access-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.access-pair>div{padding:14px;border:1px solid #3a694f;border-radius:12px;background:#081a12;display:flex;flex-direction:column;gap:5px}
+.access-pair span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.access-pair code{font-size:23px;color:var(--gold);font-weight:950;letter-spacing:.12em}
+#roomKeyInput,#joinCode{text-transform:uppercase;letter-spacing:.08em;font-weight:800}
+@media(max-width:520px){.access-pair{grid-template-columns:1fr}}
