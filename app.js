@@ -4,8 +4,25 @@ let state=loadState(), me=JSON.parse(sessionStorage.getItem("dcc-me")||'{"role":
 let timerHandle=null, netRoom=null, joinAction=null, replyAction=null, commandAction=null, stateAction=null, hostUserId=null;
 
 
-function blankState(){return {room:null,players:structuredClone(PLAYER_SEED),franchises:[],auction:{playerId:null,bid:0,leader:null,running:false,endsAt:0},feed:[],pitch:null,toss:null,matches:[],stats:{},updatedAt:Date.now(),version:3}}
-function loadState(){try{return JSON.parse(localStorage.getItem("dcc-state-v3"))||blankState()}catch{return blankState()}}
+function blankState(){return {room:null,players:structuredClone(PLAYER_SEED),franchises:[],auction:{playerId:null,bid:0,leader:null,running:false,endsAt:0},feed:[],pitch:null,toss:null,matches:[],stats:{},updatedAt:Date.now(),version:4}}
+function migrateState(s){
+  if(!s||!Array.isArray(s.players))return blankState();
+  const byName=new Map(s.players.map(p=>[String(p.name||"").toLowerCase(),p]));
+  for(const seed of PLAYER_SEED){
+    const key=seed.name.toLowerCase(),existing=byName.get(key);
+    if(existing){
+      if(existing.status==null)existing.status=seed.status;
+      if(existing.sourceTeam==null)existing.sourceTeam=seed.sourceTeam;
+      if(existing.previousSalary==null)existing.previousSalary=seed.previousSalary;
+    }else{
+      const add=structuredClone(seed);
+      s.players.push(add);byName.set(key,add);
+    }
+  }
+  s.version=4;
+  return s;
+}
+function loadState(){try{const saved=JSON.parse(localStorage.getItem("dcc-state-v3"));return saved?migrateState(saved):blankState()}catch{return blankState()}}
 function saveLocal(){localStorage.setItem("dcc-state-v3",JSON.stringify(state));sessionStorage.setItem("dcc-me",JSON.stringify(me))}
 function setMe(v){me=v;sessionStorage.setItem("dcc-me",JSON.stringify(v))}
 function enc(s){return btoa(unescape(encodeURIComponent(String(s))))}
@@ -132,7 +149,7 @@ async function logoutRoom(){
 }
 function renderAuctionSelect(){
   const q=($("#auctionSearch")?.value||"").trim().toLowerCase(),sel=$("#playerSelect");if(!sel)return;
-  const old=sel.value;sel.innerHTML=availablePlayers().filter(p=>!q||p.name.toLowerCase().includes(q)||p.iplTeam.toLowerCase().includes(q)).map(p=>"<option value='"+p.id+"'>"+esc(p.name)+" • "+p.iplTeam+" • "+money(p.basePrice)+"</option>").join("");
+  const old=sel.value;sel.innerHTML=availablePlayers().filter(p=>!q||p.name.toLowerCase().includes(q)||p.iplTeam.toLowerCase().includes(q)||String(p.sourceTeam||"").toLowerCase().includes(q)||String(p.status||"").toLowerCase().includes(q)).map(p=>"<option value='"+p.id+"'>"+esc(p.name)+" • "+p.iplTeam+" • "+money(p.basePrice)+"</option>").join("");
   if([...sel.options].some(o=>o.value===old))sel.value=old;
 }
 function hostSelectPlayer(id){if(!hostOnly())return;state.auction={playerId:id,bid:0,leader:null,running:false,endsAt:0};persist()}
@@ -219,11 +236,11 @@ function render(){
   $("#roomInfo").innerHTML="Host: <b>"+esc(state.room.hostName)+"</b><br>Starting purse: <b>"+money(state.room.startPurse)+"</b>";
   $("#franchiseList").innerHTML=state.franchises.map(f=>"<div class='teamCard'><div class='row-between'><h4>"+esc(f.team)+"</h4><span class='dot "+(f.online?"on":"")+"'></span></div><div>"+esc(f.owner)+"</div><div class='money'>"+money(f.purse)+"</div></div>").join("")||"<span class='muted'>Waiting for franchise owners.</span>";
   const sold=state.players.filter(p=>p.owner).length;
-  $("#leaguePulse").innerHTML="<div><b>"+state.franchises.length+"</b><span>Teams</span></div><div><b>"+sold+"</b><span>Players sold</span></div><div><b>"+state.matches.length+"</b><span>Matches</span></div><div><b>"+availablePlayers().length+"</b><span>Available</span></div>";
+  $("#leaguePulse").innerHTML="<div><b>"+state.franchises.length+"</b><span>Teams</span></div><div><b>"+sold+"</b><span>Players sold</span></div><div><b>"+state.matches.length+"</b><span>Matches</span></div><div><b>"+state.players.filter(p=>p.active).length+"</b><span>Player pool</span></div><div><b>"+availablePlayers().length+"</b><span>Available</span></div>";
   $("#soldCounter").textContent=sold+" sold • "+availablePlayers().length+" available";
   renderAuctionSelect();renderAuction();renderSquads();renderTeamSelects();renderAdmin();renderStandings();if(state.matches.length)renderMatch(state.matches.at(-1));
 }
-function renderAuction(){const p=currentPlayer();$("#aName").textContent=p?.name||"Choose a player";$("#aMeta").textContent=p?(p.iplTeam+" • "+p.role+" • Base "+money(p.basePrice)):"";$("#aBid").textContent=state.auction.bid?money(state.auction.bid):"—";$("#aLeader").textContent=state.auction.leader?(ownerBy(state.auction.leader)?.team||"Unknown")+" leads":"No bids";$("#aTimer").textContent=state.auction.running?Math.max(0,Math.ceil((state.auction.endsAt-Date.now())/1000)):"—";$("#auctionFeed").innerHTML=state.feed.slice(0,100).map(x=>"<div>"+esc(x)+"</div>").join("")||"<span class='muted'>Auction has not started.</span>"}
+function renderAuction(){const p=currentPlayer();$("#aName").textContent=p?.name||"Choose a player";$("#aMeta").textContent=p?((p.status==="released"?"FREE AGENT • Released by "+p.sourceTeam:p.iplTeam+" • Retained")+" • "+p.role+" • Base "+money(p.basePrice)):"";$("#aBid").textContent=state.auction.bid?money(state.auction.bid):"—";$("#aLeader").textContent=state.auction.leader?(ownerBy(state.auction.leader)?.team||"Unknown")+" leads":"No bids";$("#aTimer").textContent=state.auction.running?Math.max(0,Math.ceil((state.auction.endsAt-Date.now())/1000)):"—";$("#auctionFeed").innerHTML=state.feed.slice(0,100).map(x=>"<div>"+esc(x)+"</div>").join("")||"<span class='muted'>Auction has not started.</span>"}
 function renderSquads(){$("#squadGrid").innerHTML=state.franchises.map(f=>{const sq=state.players.filter(p=>p.owner===f.id&&p.active);return "<div class='teamCard'><h4>"+esc(f.team)+"</h4><div class='money'>"+money(f.purse)+" left</div><p>"+sq.length+" players</p><ol>"+sq.map(p=>"<li>"+esc(p.name)+" <span class='muted'>"+money(p.soldPrice)+" • "+p.role+"</span></li>").join("")+"</ol></div>"}).join("")||"<span class='muted'>No squads yet.</span>"}
 function renderTeamSelects(){const opts=state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");for(const id of ["teamA","teamB"]){const el=$("#"+id);if(!el)continue;const old=el.value;el.innerHTML=opts;if([...el.options].some(o=>o.value===old))el.value=old}$("#pitchBox").textContent=state.pitch?state.pitch.name+" — "+state.pitch.desc:"No pitch generated.";$("#tossBox").textContent=state.toss?(ownerBy(state.toss.winner)?.team+" won the toss and chose to "+state.toss.choice):"Toss not conducted."}
 function renderAdmin(){const psel=$("#editPlayer"),oldp=psel.value;psel.innerHTML=state.players.filter(p=>p.active).map(p=>"<option value='"+p.id+"'>"+esc(p.name)+"</option>").join("");if([...psel.options].some(o=>o.value===oldp))psel.value=oldp;const teams="<option value=''>Unassigned</option>"+state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");$("#assignTeam").innerHTML=teams;const tsel=$("#adminTeam"),oldt=tsel.value;tsel.innerHTML=state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");if([...tsel.options].some(o=>o.value===oldt))tsel.value=oldt;loadPlayerEditor();loadTeamEditor()}
