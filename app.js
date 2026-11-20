@@ -4,6 +4,7 @@ const CREATOR_INDEX="dcc-created-rooms-v8";
 const ROOM_PREFIX="dcc-room-v8:";
 const MEMBER_PREFIX="dcc-device-v8:";
 const SESSION_KEY="dcc-session-v8";
+const OFFLINE_CACHE_PREFIX="dcc-verified-player-v9:";
 const ALPHA="ABCDEFGHJKLMNPQRSTUVWXYZ",DIGITS="23456789",CHARS=ALPHA+DIGITS;
 let state=blankState();
 let me={role:null,ownerId:null,roomCode:null};
@@ -12,8 +13,8 @@ let timerHandle=null,playerNet=null,hostNet=null,playerActions=null,hostActions=
 let hostUserId=null,approvedAdmins=new Set(),approvedPlayers=new Map(),networkEpoch=0,loginTimeout=null;
 let pendingCreated=null;
 
-function blankState(){return {room:null,players:structuredClone(PLAYER_SEED),franchises:[],auction:{playerId:null,bid:0,leader:null,running:false,endsAt:0},feed:[],pitch:null,toss:null,matches:[],stats:{},updatedAt:Date.now(),version:8}}
-function migrateState(s){if(!s||!Array.isArray(s.players)||!Array.isArray(s.franchises))return blankState();const existing=new Set(s.players.map(p=>String(p.name||"").toLowerCase()));for(const seed of PLAYER_SEED){if(!existing.has(seed.name.toLowerCase()))s.players.push(structuredClone(seed))}s.version=8;return s}
+function blankState(){return {room:null,players:structuredClone(PLAYER_SEED),franchises:[],members:[],competitions:[],activeCompetitionId:null,auction:{playerId:null,bid:0,leader:null,running:false,endsAt:0},feed:[],pitch:null,toss:null,matches:[],stats:{},updatedAt:Date.now(),version:9}}
+function migrateState(s){if(!s||!Array.isArray(s.players)||!Array.isArray(s.franchises))return blankState();const existing=new Set(s.players.map(p=>String(p.name||"").toLowerCase()));for(const seed of PLAYER_SEED){if(!existing.has(seed.name.toLowerCase()))s.players.push(structuredClone(seed))}s.members??=[];s.competitions??=[];s.activeCompetitionId??=null;s.version=9;return s}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function money(v){v=Number(v||0);return v>=100?"₹"+(v/100).toFixed(v%100?2:0)+" Cr":"₹"+v+" L"}
 function randomString(n){let v="";do{const bytes=new Uint8Array(n);crypto.getRandomValues(bytes);v=Array.from(bytes,x=>CHARS[x%CHARS.length]).join("")}while(!/[A-Z]/.test(v)||!/[0-9]/.test(v));return v}
@@ -29,11 +30,15 @@ function deviceToken(code){let t=localStorage.getItem(MEMBER_PREFIX+code);if(!t)
 function ownerBy(id){return state.franchises.find(f=>f.id===id)}
 function currentPlayer(){return state.players.find(p=>p.id===state.auction.playerId)}
 function availablePlayers(){return state.players.filter(p=>p.active&&p.owner===null)}
-function publicState(){const v=structuredClone(state);if(v.room){delete v.room.hostPass;delete v.room.hostKey;delete v.room.playerCode;delete v.room.passHash}v.franchises=v.franchises.map(({memberToken,userId,passHash,...rest})=>rest);return v}
+function publicState(){const v=structuredClone(state);if(v.room){delete v.room.hostPass;delete v.room.hostKey;delete v.room.playerCode;delete v.room.passHash}delete v.members;v.franchises=v.franchises.map(({memberToken,userId,passHash,online,owner,joinedAt,...rest})=>rest);return v}
+function adminState(){const v=structuredClone(state);if(v.room){delete v.room.hostKey;delete v.room.playerCode}v.franchises=v.franchises.map(({memberToken,userId,...rest})=>rest);v.members=(v.members||[]).map(({memberToken,userId,...rest})=>rest);return v}
+function cachedPlayerRoom(code){try{const v=JSON.parse(localStorage.getItem(OFFLINE_CACHE_PREFIX+code)||"null");if(v?.verified===true&&v.state?.room?.code&&v.playerCode===code)return v}catch{}return null}
+function saveVerifiedPlayerCache(){if(!["owner","member"].includes(me.role)||!state.room?.code||!activePlayerCode||!hostUserId)return;const snapshot=publicState();localStorage.setItem(OFFLINE_CACHE_PREFIX+activePlayerCode,JSON.stringify({verified:true,playerCode:activePlayerCode,roomId:state.room.code,ownerId:me.ownerId||null,state:snapshot,savedAt:Date.now()}))}
+
 function hostOnly(){if(!["host","admin"].includes(me.role)){alert("Only hosts can use this control.");return false}return true}
 function tab(id){const allowed=me.role==="host"||me.role==="admin"||id!=="admin";if(!allowed)return;$$(".panel").forEach(p=>p.classList.toggle("active",p.id===id))}
 function enterGame(){$("#landing").classList.remove("active");$("#game").classList.add("active");tab("lobby");render()}
-function showLoginView(id){for(const x of ["createBox","createdBox","joinChoiceBox","playerLoginBox","hostLoginBox"]){$("#"+x)?.classList.toggle("hidden",x!==id)}}
+function showLoginView(id){for(const x of ["createBox","createdBox","joinChoiceBox","playerLoginBox","hostLoginBox","pendingLoginBox"]){$("#"+x)?.classList.toggle("hidden",x!==id)}}
 function showCreate(){showLoginView("createBox")}
 function showJoin(){showLoginView("joinChoiceBox")}
 function showPlayerLogin(){showLoginView("playerLoginBox")}
@@ -55,7 +60,7 @@ function persist(){state.updatedAt=Date.now();if(me.role==="host"){saveLocal();b
 async function closeNetworks(){networkEpoch++;clearTimeout(loginTimeout);try{await playerNet?.leave()}catch{}try{await hostNet?.leave()}catch{}playerNet=null;hostNet=null;playerActions=null;hostActions=null;hostUserId=null;approvedAdmins.clear();approvedPlayers.clear()}
 async function loadTrystero(){return (await import("https://esm.run/trystero")).joinRoom}
 function attachActions(room){return {hello:room.makeAction("dcc-hello"),reply:room.makeAction("dcc-reply"),command:room.makeAction("dcc-command"),sync:room.makeAction("dcc-sync")}}
-function broadcastState(){if(me.role!=="host")return;const snapshot=publicState();playerActions?.sync.send(snapshot).catch(console.warn);hostActions?.sync.send(snapshot).catch(console.warn)}
+function broadcastState(){if(me.role!=="host")return;playerActions?.sync.send(publicState()).catch(console.warn);hostActions?.sync.send(adminState()).catch(console.warn)}
 function loginPending(expectedRole){clearTimeout(loginTimeout);loginTimeout=setTimeout(()=>{if(me.role===expectedRole){setNet("HOST OFFLINE");alert("No host responded. Check the code and keep the creator's room open. Peer-to-peer connections may also be blocked by the network.")}},15000)}
 async function connectPlayerRoomAsHost(code){
   try{await playerNet?.leave()}catch{}playerNet=null;playerActions=null;approvedPlayers.clear();
@@ -66,14 +71,18 @@ async function connectPlayerRoomAsHost(code){
     if(me.role!=="host"||data?.type!=="player-join"||!data.deviceToken)return;
     const f=state.franchises.find(x=>x.memberToken===data.deviceToken);
     approvedPlayers.set(ctx.userId,data.deviceToken);
-    if(f){f.userId=ctx.userId;f.online=true;persist()}
+    let member=(state.members||[]).find(x=>x.memberToken===data.deviceToken);
+    if(!member){member={memberToken:data.deviceToken,joinedAt:Date.now(),lastSeen:Date.now(),online:true,owner:"Pending setup",team:"Not assigned",ownerId:null};state.members.push(member)}
+    member.userId=ctx.userId;member.online=true;member.lastSeen=Date.now();
+    if(f){f.userId=ctx.userId;f.online=true;member.owner=f.owner;member.team=f.team;member.ownerId=f.id}
+    persist();
     playerActions.reply.send({ok:true,roomId:state.room.code,ownerId:f?.id||null,state:publicState()},{target:ctx.userId}).catch(console.warn);
   });
   playerActions.command.onMessage((data,ctx)=>{
     if(me.role!=="host"||!approvedPlayers.has(ctx.userId))return;
     handlePlayerCommand(data,ctx.userId);
   });
-  playerNet.onUserLeave(({userId})=>{if(me.role!=="host")return;approvedPlayers.delete(userId);const f=state.franchises.find(x=>x.userId===userId);if(f){f.online=false;persist()}});
+  playerNet.onUserLeave(({userId})=>{if(me.role!=="host")return;approvedPlayers.delete(userId);const f=state.franchises.find(x=>x.userId===userId);if(f)f.online=false;const m=(state.members||[]).find(x=>x.userId===userId);if(m)m.online=false;persist()});
   playerNet.onError(e=>{console.warn("Player channel",e)});
 }
 async function connectHostRoomAsCreator(roomId,hostKey){
@@ -83,7 +92,7 @@ async function connectHostRoomAsCreator(roomId,hostKey){
   hostActions.hello.onMessage((data,ctx)=>{
     if(me.role!=="host"||data?.type!=="host-join"||data.roomId!==state.room?.code)return;
     approvedAdmins.add(ctx.userId);
-    hostActions.reply.send({ok:true,state:publicState(),roomId:state.room.code},{target:ctx.userId}).catch(console.warn);
+    hostActions.reply.send({ok:true,state:adminState(),roomId:state.room.code},{target:ctx.userId}).catch(console.warn);
   });
   hostActions.command.onMessage((data,ctx)=>{
     if(me.role!=="host"||!approvedAdmins.has(ctx.userId)||data?.type!=="admin-state"||data.roomId!==state.room?.code)return;
@@ -93,6 +102,7 @@ async function connectHostRoomAsCreator(roomId,hostKey){
     const safe=migrateState(candidate);
     safe.franchises=safe.franchises.map(f=>({...f,...(secretTokens.get(f.id)||{})}));
     safe.room={...state.room,...safe.room,code:state.room.code};
+    safe.members=state.members||[];
     state=safe;saveLocal();broadcastState();render();if(state.auction.running)runTimer();
   });
   hostNet.onUserLeave(({userId})=>approvedAdmins.delete(userId));
@@ -116,18 +126,21 @@ async function connectPlayer(code){
   const sendHello=(target)=>playerActions?.hello.send({type:"player-join",deviceToken:deviceToken(code)},{target}).catch(console.warn);
   playerNet.onUserJoin(({userId})=>sendHello(userId),{replay:true});
   playerActions.reply.onMessage((data,ctx)=>{
-    if(!["guest","member","owner"].includes(me.role)||!data?.ok||!data.state?.room?.code)return;
+    if(!["guest","member","owner"].includes(me.role))return;
+    if(data?.ok===false){if(data.error)alert(data.error);return}
+    if(!data?.ok||!data.state?.room?.code)return;
     hostUserId=ctx.userId;state=migrateState(data.state);
     setMe({role:data.ownerId?"owner":"member",ownerId:data.ownerId||null,roomCode:state.room.code});
-    setNet("CONNECTED",true);clearTimeout(loginTimeout);enterGame();
+    setNet("CONNECTED",true);clearTimeout(loginTimeout);$("#pendingLoginBox")?.classList.add("hidden");enterGame();saveVerifiedPlayerCache();
   });
   playerActions.sync.onMessage((incoming,ctx)=>{
     if(!["owner","member"].includes(me.role)||ctx.userId!==hostUserId||incoming?.room?.code!==state.room?.code)return;
-    state=migrateState(incoming);render();
+    state=migrateState(incoming);saveVerifiedPlayerCache();render();
   });
-  playerNet.onUserLeave(({userId})=>{if(userId===hostUserId){hostUserId=null;setNet("HOST OFFLINE")}});
+  playerNet.onUserLeave(({userId})=>{if(userId===hostUserId){hostUserId=null;setNet("OFFLINE VIEW");render()}});
   playerNet.onError(e=>console.warn("Player connection",e));
-  loginPending("guest");
+  if(me.role==="guest")loginPending("guest");
+  else setTimeout(()=>{if(!hostUserId&&["owner","member"].includes(me.role)){setNet("OFFLINE VIEW");render()}},15000);
 }
 async function connectAsRemoteHost(roomId,hostKey){
   await closeNetworks();setNet("FINDING HOST");
@@ -160,6 +173,8 @@ function handlePlayerCommand(data,userId){
       f={id:crypto.randomUUID(),owner,team,memberToken:token,userId,online:true,purse:state.room.startPurse,joinedAt:Date.now()};
       state.franchises.push(f);state.feed.unshift("🏏 "+team+" joined the room.");
     }else{f.userId=userId;f.online=true}
+    persist();
+    const member=(state.members||[]).find(x=>x.memberToken===token);if(member){member.owner=f.owner;member.team=f.team;member.ownerId=f.id;member.online=true;member.lastSeen=Date.now()}
     persist();
     playerActions.reply.send({ok:true,roomId:state.room.code,ownerId:f.id,state:publicState()},{target:userId}).catch(console.warn);
     return;
@@ -201,10 +216,20 @@ async function openCreatedRoom(code){
 async function joinAsPlayer(){
   const code=$("#playerJoinCodeInput").value.trim().toUpperCase();
   if(!/^[A-Z0-9]{10}$/.test(code)||!/[A-Z]/.test(code)||!/[0-9]/.test(code))return alert("Enter the 10-character Player Joining Code.");
-  activeHostKey=null;activePlayerCode=code;state=blankState();
-  setMe({role:"guest",ownerId:null,roomCode:null});
-  try{await connectPlayer(code)}catch(e){console.error(e);setNet("NETWORK ERROR");alert("Could not connect. Check your internet connection.")}
+  activeHostKey=null;activePlayerCode=code;
+  const saved=cachedPlayerRoom(code);
+  if(saved){
+    state=migrateState(saved.state);
+    setMe({role:saved.ownerId?"owner":"member",ownerId:saved.ownerId||null,roomCode:saved.roomId});
+    setNet("OFFLINE VIEW");enterGame();
+  }else{
+    state=blankState();setMe({role:"guest",ownerId:null,roomCode:null});
+    showLoginView("pendingLoginBox");
+  }
+  try{await connectPlayer(code)}catch(e){console.error(e);setNet(saved?"OFFLINE VIEW":"NETWORK ERROR");if(!saved)alert("Could not connect. Check your internet connection.")}
 }
+function backFromPending(){closeNetworks();setMe({role:null,ownerId:null,roomCode:null});showPlayerLogin()}
+
 async function joinAsHost(){
   const roomId=$("#hostRoomIdInput").value.trim().toUpperCase(),key=$("#hostKeyInput").value.trim().toUpperCase();
   if(!/^DCC-[A-Z0-9]{6}$/.test(roomId)||!/^[A-Z0-9]{6}$/.test(key))return alert("Enter your Room ID and 6-character Host Key.");
