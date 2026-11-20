@@ -1,7 +1,7 @@
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 let state=loadState(), me=JSON.parse(sessionStorage.getItem("dcc-me")||'{"role":null,"ownerId":null}');
-let timerHandle=null, netRoom=null, joinAction=null, replyAction=null, commandAction=null, stateAction=null, hostUserId=null;
+let timerHandle=null, netRoom=null, joinAction=null, replyAction=null, commandAction=null, stateAction=null, hostUserId=null, networkSelfId=null;
 let directoryRoom=null, directoryAction=null, directoryTimer=null;
 const directoryRooms=new Map(), adminUsers=new Set();
 const MASTER_HOST_HASH="e2650a398f9029c0f378a1a1af2032c71a2e9c3ab6b442ba3d17f42a53cd4310";
@@ -40,12 +40,13 @@ async function hostLogin(){
   const key=$("#hostKeyInput").value.trim();
   if(!key||await sha256(key)!==MASTER_HOST_HASH)return alert("Invalid host key.");
   sessionStorage.setItem("dcc-host-auth","1");
+  sessionStorage.setItem("dcc-host-secret",key);
   setMe({role:"superhost",ownerId:null});
   $("#landing").classList.remove("active");$("#hostHub").classList.add("active");
   await startDirectory();renderLiveRooms();
 }
 async function hostLogout(){
-  sessionStorage.removeItem("dcc-host-auth");setMe({role:null,ownerId:null});
+  sessionStorage.removeItem("dcc-host-auth");sessionStorage.removeItem("dcc-host-secret");setMe({role:null,ownerId:null});
   try{await directoryRoom?.leave()}catch{} directoryRoom=null;directoryAction=null;clearInterval(directoryTimer);
   $("#hostHub").classList.remove("active");$("#landing").classList.add("active");setNet("OFFLINE");
 }
@@ -86,7 +87,7 @@ async function startDirectory(){
 }
 function announceRoom(){
   if(!directoryAction||me.role!=="host"||!state.room)return;
-  directoryAction.send({code:state.room.code,hostName:state.room.hostName,teams:state.franchises.length,matches:state.matches.length,createdAt:state.room.createdAt||Date.now()}).catch(()=>{});
+  directoryAction.send({code:state.room.code,hostName:state.room.hostName,teams:state.franchises.length,matches:state.matches.length,createdAt:state.room.createdAt||Date.now(),challenge:state.room.hostChallenge}).catch(()=>{});
 }
 function renderLiveRooms(){
   const el=$("#liveRooms");if(!el)return;
@@ -95,10 +96,13 @@ function renderLiveRooms(){
 }
 async function joinAsHost(roomCode){
   if(sessionStorage.getItem("dcc-host-auth")!=="1")return alert("Host login required.");
+  const room=directoryRooms.get(roomCode),secret=sessionStorage.getItem("dcc-host-secret");
+  if(!room?.challenge||!secret)return alert("Room host proof is unavailable. Refresh the host centre.");
   setMe({role:"admin",ownerId:"admin"});
   const ok=await connectNetwork(roomCode,false);if(!ok)return;
-  await joinAction.send({roomCode,admin:true,adminProof:MASTER_HOST_HASH});
-  setTimeout(()=>{if(me.role==="admin"&&!state.room?.code)alert("Could not connect to that room.")},7000);
+  const proof=await sha256(secret+":"+room.challenge+":"+networkSelfId);
+  await joinAction.send({roomCode,admin:true,adminProof:proof});
+  setTimeout(()=>{if(me.role==="admin"&&state.room?.code!==roomCode)alert("Could not connect to that room.")},7000);
 }
 
 async function connectNetwork(roomCode,isHost){
@@ -107,7 +111,7 @@ async function connectNetwork(roomCode,isHost){
     const {joinRoom}=await import("https://esm.run/trystero");
     if(netRoom)try{await netRoom.leave()}catch{}
     netRoom=joinRoom({appId:"diddyx6969/dumper-cricket-club-v4",password:roomCode,identity:"none"},roomCode);
-    const self=await netRoom.getSelf();
+    const self=await netRoom.getSelf();networkSelfId=self.userId;
     joinAction=netRoom.makeAction("dcc-join");
     replyAction=netRoom.makeAction("dcc-reply");
     commandAction=netRoom.makeAction("dcc-cmd");
@@ -144,7 +148,7 @@ async function createRoom(){
   if(sessionStorage.getItem("dcc-host-auth")!=="1")return alert("Host login required.");
   const name=$("#hostName").value.trim();if(!name)return alert("Enter creator name.");
   state=blankState();
-  state.room={code:code(),hostName:name,startPurse:Math.max(1,Number($("#startPurse").value||120))*100,createdAt:Date.now(),userCodes:[]};
+  state.room={code:code(),hostName:name,startPurse:Math.max(1,Number($("#startPurse").value||120))*100,createdAt:Date.now(),userCodes:[],hostChallenge:crypto.randomUUID()};
   setMe({role:"host",ownerId:"host"});saveLocal();enterGame();
   await connectNetwork(state.room.code,true);announceRoom();
 }
@@ -157,10 +161,12 @@ async function joinRoom(){
   setTimeout(()=>{if(me.role==="guest")alert("Room not found or login code was not accepted. Make sure the creator is online.")},8000);
 }
 
-function handleJoinRequest(data,userId){
+async function handleJoinRequest(data,userId){
   if(!state.room||data.roomCode!==state.room.code)return;
   if(data.admin){
-    if(data.adminProof!==MASTER_HOST_HASH){replyAction.send({ok:false,error:"Invalid host key"},{target:userId});return}
+    const secret=sessionStorage.getItem("dcc-host-secret");
+    const expected=secret&&state.room.hostChallenge?await sha256(secret+":"+state.room.hostChallenge+":"+userId):"";
+    if(!expected||data.adminProof!==expected){replyAction.send({ok:false,error:"Invalid host key"},{target:userId});return}
     adminUsers.add(userId);
     replyAction.send({ok:true,admin:true,state:publicState()},{target:userId});return;
   }
