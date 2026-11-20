@@ -2,64 +2,7 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 let state=loadState(), me=JSON.parse(sessionStorage.getItem("dcc-me")||'{"role":null,"ownerId":null}');
 let timerHandle=null, netRoom=null, joinAction=null, replyAction=null, commandAction=null, stateAction=null, hostUserId=null;
-let audioCtx=null,lastCountdownSecond=null;
-let sfxEnabled=localStorage.getItem("dcc-sfx")!=="off";
 
-function audio(){
-  if(!sfxEnabled)return null;
-  try{
-    audioCtx??=new (window.AudioContext||window.webkitAudioContext)();
-    if(audioCtx.state==="suspended")audioCtx.resume();
-    return audioCtx;
-  }catch{return null}
-}
-function tone(freq=440,dur=.09,type="sine",gain=.08,delay=0){
-  const a=audio();if(!a)return;
-  const o=a.createOscillator(),g=a.createGain(),t=a.currentTime+delay;
-  o.type=type;o.frequency.setValueAtTime(freq,t);
-  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
-  o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+dur+.02);
-}
-function noise(dur=.08,gain=.05,delay=0){
-  const a=audio();if(!a)return;
-  const len=Math.max(1,Math.floor(a.sampleRate*dur)),buf=a.createBuffer(1,len,a.sampleRate),data=buf.getChannelData(0);
-  for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*(1-i/len);
-  const src=a.createBufferSource(),g=a.createGain(),t=a.currentTime+delay;src.buffer=buf;g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);src.connect(g);g.connect(a.destination);src.start(t);
-}
-function playSfx(name){
-  if(!sfxEnabled)return;
-  switch(name){
-    case "join": tone(523,.08,"sine",.07);tone(659,.1,"sine",.06,.08);tone(784,.13,"sine",.06,.17);break;
-    case "bid": tone(760,.045,"square",.045);tone(980,.055,"square",.035,.045);break;
-    case "sold": noise(.07,.10);tone(150,.18,"triangle",.12);tone(95,.24,"sine",.09,.06);break;
-    case "tick": tone(920,.045,"square",.035);break;
-    case "start": tone(330,.07,"triangle",.05);tone(494,.08,"triangle",.05,.08);break;
-    case "toss": tone(880,.04,"sine",.04);tone(660,.04,"sine",.04,.05);tone(990,.08,"sine",.05,.1);break;
-    case "pitch": noise(.05,.025);tone(410,.09,"sine",.04,.03);break;
-    case "four": tone(620,.07,"square",.045);tone(780,.08,"square",.045,.07);break;
-    case "six": tone(520,.07,"sawtooth",.04);tone(760,.08,"sawtooth",.05,.07);tone(1040,.12,"sawtooth",.04,.15);break;
-    case "wicket": noise(.12,.08);tone(220,.12,"square",.08);tone(130,.18,"square",.07,.09);break;
-    case "win": tone(523,.08,"triangle",.055);tone(659,.08,"triangle",.055,.09);tone(784,.08,"triangle",.055,.18);tone(1047,.2,"triangle",.06,.27);break;
-    case "logout": tone(440,.06,"sine",.04);tone(294,.11,"sine",.04,.06);break;
-  }
-}
-function toggleSfx(){
-  sfxEnabled=!sfxEnabled;
-  localStorage.setItem("dcc-sfx",sfxEnabled?"on":"off");
-  renderSfxButton();
-  if(sfxEnabled)playSfx("join");
-}
-function renderSfxButton(){
-  const b=$("#sfxBtn");if(!b)return;
-  b.textContent=sfxEnabled?"🔊 SFX":"🔇 SFX";
-  b.classList.toggle("off",!sfxEnabled);
-}
-function playMatchHighlights(m){
-  if(!sfxEnabled)return;
-  const events=m.i1.events.concat(m.i2.events).filter(x=>/^(WICKET|FOUR|SIX)/.test(x)).slice(-10);
-  events.forEach((e,i)=>setTimeout(()=>playSfx(e.startsWith("WICKET")?"wicket":e.startsWith("SIX")?"six":"four"),i*170));
-  setTimeout(()=>playSfx("win"),events.length*170+120);
-}
 
 function blankState(){return {room:null,players:structuredClone(PLAYER_SEED),franchises:[],auction:{playerId:null,bid:0,leader:null,running:false,endsAt:0},feed:[],pitch:null,toss:null,matches:[],stats:{},updatedAt:Date.now(),version:3}}
 function loadState(){try{return JSON.parse(localStorage.getItem("dcc-state-v3"))||blankState()}catch{return blankState()}}
@@ -150,7 +93,7 @@ function handleJoinRequest(data,userId){
   }else{
     if(state.franchises.some(x=>x.team.toLowerCase()===data.team.toLowerCase())){replyAction.send({ok:false,error:"Team name already used"},{target:userId});return}
     f={id:crypto.randomUUID(),loginId:data.loginId,passHash:enc(data.password),owner:data.owner,team:data.team,purse:state.room.startPurse,userId,online:true,joinedAt:Date.now()};
-    state.franchises.push(f);state.feed.unshift("🏏 "+f.team+" joined the room.");playSfx("join");
+    state.franchises.push(f);state.feed.unshift("🏏 "+f.team+" joined the room.");
   }
   persist();
   replyAction.send({ok:true,ownerId:f.id,loginId:f.loginId,state:publicState()},{target:userId});
@@ -177,7 +120,6 @@ function sendCommand(data){if(!commandAction||!hostUserId)return alert("Not conn
 
 function copyRoom(){navigator.clipboard?.writeText(state.room?.code||"");}
 async function logoutRoom(){
-  playSfx("logout");
   try{await netRoom?.leave()}catch{}
   netRoom=null;hostUserId=null;
   sessionStorage.removeItem("dcc-me");
@@ -194,14 +136,14 @@ function renderAuctionSelect(){
   if([...sel.options].some(o=>o.value===old))sel.value=old;
 }
 function hostSelectPlayer(id){if(!hostOnly())return;state.auction={playerId:id,bid:0,leader:null,running:false,endsAt:0};persist()}
-function startAuction(){if(!hostOnly())return;let p=currentPlayer();if(!p){p=state.players.find(x=>x.id===$("#playerSelect").value)||availablePlayers()[0]}if(!p)return alert("No players available.");state.auction={playerId:p.id,bid:p.basePrice,leader:null,running:true,endsAt:Date.now()+Number($("#timerSec").value||15)*1000};state.feed.unshift("🔔 "+p.name+" opens at "+money(p.basePrice));playSfx("start");persist();runTimer()}
+function startAuction(){if(!hostOnly())return;let p=currentPlayer();if(!p){p=state.players.find(x=>x.id===$("#playerSelect").value)||availablePlayers()[0]}if(!p)return alert("No players available.");state.auction={playerId:p.id,bid:p.basePrice,leader:null,running:true,endsAt:Date.now()+Number($("#timerSec").value||15)*1000};state.feed.unshift("🔔 "+p.name+" opens at "+money(p.basePrice));persist();runTimer()}
 function placeBid(){if(me.role!=="owner")return alert("Only franchise owners bid.");sendCommand({type:"bid"})}
-function processBid(ownerId){const p=currentPlayer(),f=ownerBy(ownerId);if(!p||!f||!state.auction.running)return;const step=Number($("#bidStep")?.value||10),next=state.auction.leader?state.auction.bid+step:state.auction.bid;if(state.auction.leader===f.id)return;if(f.purse<next){state.feed.unshift("❌ "+f.team+" cannot afford "+money(next));persist();return}state.auction.bid=next;state.auction.leader=f.id;state.auction.endsAt=Date.now()+Number($("#timerSec")?.value||15)*1000;state.feed.unshift("💰 "+f.team+" bids "+money(next)+" for "+p.name);playSfx("bid");persist()}
-function sellPlayer(){if(!hostOnly())return;const p=currentPlayer(),f=ownerBy(state.auction.leader);if(!p||!f)return alert("There is no winning bidder.");if(f.purse<state.auction.bid)return alert("Insufficient purse.");p.owner=f.id;p.soldPrice=state.auction.bid;f.purse-=state.auction.bid;state.feed.unshift("🔨 SOLD — "+p.name+" to "+f.team+" for "+money(p.soldPrice));playSfx("sold");state.auction={playerId:null,bid:0,leader:null,running:false,endsAt:0};persist()}
+function processBid(ownerId){const p=currentPlayer(),f=ownerBy(ownerId);if(!p||!f||!state.auction.running)return;const step=Number($("#bidStep")?.value||10),next=state.auction.leader?state.auction.bid+step:state.auction.bid;if(state.auction.leader===f.id)return;if(f.purse<next){state.feed.unshift("❌ "+f.team+" cannot afford "+money(next));persist();return}state.auction.bid=next;state.auction.leader=f.id;state.auction.endsAt=Date.now()+Number($("#timerSec")?.value||15)*1000;state.feed.unshift("💰 "+f.team+" bids "+money(next)+" for "+p.name);persist()}
+function sellPlayer(){if(!hostOnly())return;const p=currentPlayer(),f=ownerBy(state.auction.leader);if(!p||!f)return alert("There is no winning bidder.");if(f.purse<state.auction.bid)return alert("Insufficient purse.");p.owner=f.id;p.soldPrice=state.auction.bid;f.purse-=state.auction.bid;state.feed.unshift("🔨 SOLD — "+p.name+" to "+f.team+" for "+money(p.soldPrice));state.auction={playerId:null,bid:0,leader:null,running:false,endsAt:0};persist()}
 function markUnsold(){if(!hostOnly())return;const p=currentPlayer();if(p)state.feed.unshift("UNSOLD — "+p.name);state.auction={playerId:null,bid:0,leader:null,running:false,endsAt:0};persist()}
 function cancelAuction(){if(!hostOnly())return;const p=currentPlayer();if(p)state.feed.unshift("Auction cancelled for "+p.name);resetAuctionState()}
 function resetAuctionState(){if(!hostOnly())return;state.auction={playerId:null,bid:0,leader:null,running:false,endsAt:0};persist()}
-function runTimer(){clearInterval(timerHandle);lastCountdownSecond=null;timerHandle=setInterval(()=>{if(!state.auction.running){clearInterval(timerHandle);return}const left=Math.max(0,Math.ceil((state.auction.endsAt-Date.now())/1000));if(left<=3&&left>0&&left!==lastCountdownSecond){lastCountdownSecond=left;playSfx("tick")}if(Date.now()>=state.auction.endsAt){state.auction.running=false;state.feed.unshift("⏱️ Time! Room decides SOLD or UNSOLD.");persist();clearInterval(timerHandle)}else renderAuction()},250)}
+function runTimer(){clearInterval(timerHandle);timerHandle=setInterval(()=>{if(!state.auction.running){clearInterval(timerHandle);return}if(Date.now()>=state.auction.endsAt){state.auction.running=false;state.feed.unshift("⏱️ Time! Room decides SOLD or UNSOLD.");persist();clearInterval(timerHandle)}else renderAuction()},250)}
 
 function addCustomPlayer(){if(!hostOnly())return;const name=$("#newPlayerName").value.trim(),basePrice=Number($("#newPlayerPrice").value);if(!name||basePrice<1)return alert("Enter a player name and valid price.");state.players.push({id:crypto.randomUUID(),name,iplTeam:"CUSTOM",role:$("#newPlayerRole").value,basePrice,bat:clamp($("#newBat").value),bowl:clamp($("#newBowl").value),field:clamp($("#newField").value),owner:null,soldPrice:null,active:true});$("#newPlayerName").value="";persist()}
 function clamp(v){return Math.max(1,Math.min(99,Number(v||50)))}
@@ -219,8 +161,8 @@ const PITCHES=[
 {name:"Slow & Low",bat:-6,pace:-8,spin:9,desc:"Timing is hard; cutters and smart batting matter."},
 {name:"Balanced",bat:1,pace:2,spin:2,desc:"Fair conditions with rewards for quality cricket."}
 ];
-function generatePitch(){if(!hostOnly())return;state.pitch=structuredClone(PITCHES[Math.floor(Math.random()*PITCHES.length)]);playSfx("pitch");persist()}
-function conductToss(){if(!hostOnly())return;const a=ownerBy($("#teamA").value),b=ownerBy($("#teamB").value);if(!a||!b||a.id===b.id)return alert("Choose two different teams.");const winner=Math.random()<.5?a:b;state.toss={winner:winner.id,choice:Math.random()<.52?"bat":"bowl"};playSfx("toss");persist()}
+function generatePitch(){if(!hostOnly())return;state.pitch=structuredClone(PITCHES[Math.floor(Math.random()*PITCHES.length)]);persist()}
+function conductToss(){if(!hostOnly())return;const a=ownerBy($("#teamA").value),b=ownerBy($("#teamB").value);if(!a||!b||a.id===b.id)return alert("Choose two different teams.");const winner=Math.random()<.5?a:b;state.toss={winner:winner.id,choice:Math.random()<.52?"bat":"bowl"};persist()}
 function formatChanged(){$("#customOversLabel").classList.toggle("hidden",$("#format").value!=="custom")}
 function fillXI(){for(const [sel,box] of [["#teamA","#xiA"],["#teamB","#xiB"]]){const id=$(sel)?.value;if(!id||!$(box)||$(box).value.trim())continue;$(box).value=state.players.filter(p=>p.owner===id&&p.active).slice(0,11).map(p=>p.name).join("\n")}}
 function getXI(teamId,text){const squad=state.players.filter(p=>p.owner===teamId&&p.active),names=text.split(/\n|,/).map(x=>x.trim()).filter(Boolean);if(!names.length)return squad.slice(0,11);return names.map(n=>squad.find(p=>p.name.toLowerCase()===n.toLowerCase())).filter(Boolean).slice(0,11)}
@@ -255,7 +197,7 @@ function simulateMatch(){
   const i1=simulateInnings(first,second,firstXI,secondXI,overs,null,b1),i2=simulateInnings(second,first,secondXI,firstXI,overs,i1.runs+1,b2);
   const tied=i1.runs===i2.runs,winner=tied?null:(i2.runs>i1.runs?second.id:first.id);
   const m={id:crypto.randomUUID(),a:first.id,b:second.id,overs,format:$("#format").value,pitch:state.pitch.name,toss:structuredClone(state.toss),i1,i2,winner,tied,at:Date.now()};
-  state.matches.push(m);updateStats(m);state.toss=null;persist();renderMatch(m);playMatchHighlights(m);
+  state.matches.push(m);updateStats(m);state.toss=null;persist();renderMatch(m);
 }
 function updateStats(m){for(const inn of [m.i1,m.i2]){Object.entries(inn.batStats).forEach(([id,s])=>{state.stats[id]??={runs:0,balls:0,wickets:0,runsConceded:0,matches:0};state.stats[id].runs+=s.runs;state.stats[id].balls+=s.balls;state.stats[id].matches++});Object.entries(inn.bowlStats).forEach(([id,s])=>{state.stats[id]??={runs:0,balls:0,wickets:0,runsConceded:0,matches:0};state.stats[id].wickets+=s.wickets;state.stats[id].runsConceded+=s.runs})}}
 function roastFor(m){const loser=m.winner?ownerBy(m.winner===m.a?m.b:m.a):null;if(!loser)return "Both managements found a way to leave with equal amounts of stress.";return loser.team+": "+pick(["that auction plan aged like milk under stadium lights.","the XI looked picked by spinning a wheel and hoping for divine intervention.","management spent crores and apparently forgot to buy a plan.","the opposition brought cricket; you brought a group project with no leader.","that tactical masterclass belongs in a museum labelled ‘what not to do’.","the strategy meeting clearly ended after somebody said ‘trust the vibes’."])}
@@ -267,7 +209,6 @@ function importLeague(e){if(!hostOnly())return;const file=e.target.files?.[0];if
 function factoryReset(){if(!hostOnly())return;if(!confirm("Erase/reset this room state from your browser?"))return;localStorage.removeItem("dcc-state-v3");sessionStorage.removeItem("dcc-me");location.reload()}
 
 function render(){
-  renderSfxButton();
   $("#roomBadge").textContent=state.room?.code||"NO ROOM";
   $("#logoutBtn")?.classList.toggle("hidden",!["host","owner"].includes(me.role));
   $("#adminTab")?.classList.remove("hidden");
