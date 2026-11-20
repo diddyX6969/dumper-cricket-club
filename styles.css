@@ -361,3 +361,25 @@ footer{text-align:center;padding:30px;color:#728c7a;font-size:12px}
   .price{font-size:40px}
   .logout{padding:7px 9px}
 }
+
+/* DCC room login — distinct from the standalone match laboratory. */
+.entry-actions{gap:12px}
+.entry-actions button{min-width:155px;padding:15px 18px;font-size:16px}
+.standalone-note{margin:18px 0 0!important;font-size:13px!important}
+.standalone-note a{color:#f1ce82;text-underline-offset:3px}
+.back-button{margin-bottom:18px}
+.wide-action{width:100%;font-size:16px;padding:15px;margin-top:12px}
+.credentials{display:flex;flex-direction:column;gap:10px;margin:18px 0}
+.credentials>div{border:1px solid #3c7556;border-radius:12px;background:#071b12;padding:15px}
+.credentials small{display:block;color:#a9c9b3;margin-bottom:7px;font-size:12px}
+.credentials strong{font-family:ui-monospace,monospace;font-size:clamp(19px,3vw,26px);letter-spacing:.14em;color:#f4cc6e;overflow-wrap:anywhere}
+.role-choices{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.role-choices button{font-size:18px;padding:26px 12px}
+.role-choices small{display:block;font-size:12px;opacity:.8;font-weight:500;margin-top:5px}
+#playerJoinCodeInput,#hostRoomIdInput,#hostKeyInput{text-transform:uppercase;font-weight:800;letter-spacing:.1em}
+.saved-room{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid #285f43}
+.saved-room b{display:block;color:#f3d28a}
+.saved-room span{display:block;font-size:12px;color:#93af9a}
+.saved-room .actions{margin:0}
+.lab-link{display:inline-flex;padding:12px 17px;border-radius:9px;color:#1b251b;font-weight:850;background:#f4c95d;text-decoration:none}
+@media(max-width:600px){.role-choices{grid-template-columns:1fr}.entry-actions{flex-direction:column}.entry-actions button{width:100%}.saved-room{align-items:stretch;flex-direction:column}}
