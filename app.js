@@ -83,22 +83,34 @@ async function connectNetwork(roomCode,isHost){
 }
 
 async function createRoom(){
-  const name=$("#hostName").value.trim(),id=$("#hostId").value.trim(),pass=$("#hostPass").value;
-  if(!name||!id||!pass)return alert("Enter host name, ID and password.");
+  const name=$("#hostName").value.trim();
+  if(!name)return alert("Enter your name.");
+  const autoId="host-"+Math.random().toString(36).slice(2,8);
+  const autoPass=Math.random().toString(36).slice(2,10);
   state=blankState();
-  state.room={code:code(),hostName:name,hostId:id,hostPass:enc(pass),startPurse:Math.max(1,Number($("#startPurse").value||120))*100,createdAt:Date.now()};
+  state.room={code:code(),hostName:name,hostId:autoId,hostPass:enc(autoPass),startPurse:Math.max(1,Number($("#startPurse").value||120))*100,createdAt:Date.now()};
   setMe({role:"host",ownerId:"host"});
   saveLocal();enterGame();
   await connectNetwork(state.room.code,true);
 }
 
+function ownerCredentialKey(roomCode,team){return "dcc-owner-"+String(roomCode).toUpperCase()+"-"+String(team).trim().toLowerCase()}
+function getOrCreateOwnerCredentials(roomCode,team){
+  const key=ownerCredentialKey(roomCode,team);
+  try{const old=JSON.parse(localStorage.getItem(key)||"null");if(old?.loginId&&old?.password)return old}catch{}
+  const creds={loginId:"owner-"+Math.random().toString(36).slice(2,8),password:Math.random().toString(36).slice(2,10)};
+  localStorage.setItem(key,JSON.stringify(creds));return creds;
+}
+
 async function joinRoom(){
-  const req={roomCode:$("#joinCode").value.trim().toUpperCase(),loginId:$("#joinId").value.trim(),password:$("#joinPass").value,owner:$("#ownerName").value.trim(),team:$("#teamName").value.trim()};
-  if(!req.roomCode||!req.loginId||!req.password||!req.owner||!req.team)return alert("Complete all join fields.");
+  const roomCode=$("#joinCode").value.trim().toUpperCase(),owner=$("#ownerName").value.trim(),team=$("#teamName").value.trim();
+  if(!roomCode||!owner||!team)return alert("Enter room code, your name and team name.");
+  const creds=getOrCreateOwnerCredentials(roomCode,team);
+  const req={roomCode,loginId:creds.loginId,password:creds.password,owner,team};
   setMe({role:"guest",ownerId:null});
-  const ok=await connectNetwork(req.roomCode,false);if(!ok)return;
+  const ok=await connectNetwork(roomCode,false);if(!ok)return;
   await joinAction.send(req);
-  setTimeout(()=>{if(me.role==="guest")alert("Host not found yet. Check the room code and make sure the host page is open.")},8000);
+  setTimeout(()=>{if(me.role==="guest")alert("Could not find the host. Check the room code and make sure the host keeps DCC open.")},8000);
 }
 
 function handleJoinRequest(data,userId){
