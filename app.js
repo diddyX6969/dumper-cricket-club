@@ -416,6 +416,7 @@ function renderStandings(){const rows=standings();$("#pointsBody").innerHTML=row
 window.addEventListener("beforeunload",()=>{try{playerNet?.leave();hostNet?.leave()}catch{}});
 renderMyRooms();render();
 (async()=>{
+  if(window.DCC_PRESENTATION)return;
   let saved;
   try{saved=JSON.parse(sessionStorage.getItem(SESSION_KEY)||"null")}catch{return}
   if(!saved?.me?.role)return;
