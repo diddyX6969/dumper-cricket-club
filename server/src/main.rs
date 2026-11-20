@@ -183,7 +183,7 @@ async fn host_login(
     .ok_or((StatusCode::UNAUTHORIZED, "Invalid Room ID or Host Key".into()))?;
 
     let room_db_id: Uuid = row.get("id");
-    let session_token = issue_session(&state.db, room_db_id, None, "host")
+    let session_token = issue_session(&state.db, room_db_id, None, None, "host")
         .await
         .map_err(internal)?;
 
