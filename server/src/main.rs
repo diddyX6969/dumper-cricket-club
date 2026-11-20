@@ -32,6 +32,8 @@ struct CreateRoomResponse {
     host_key: String,
     player_join_code: String,
     host_session_token: String,
+    player_network_secret: String,
+    host_network_secret: String,
 }
 
 #[derive(Deserialize)]
@@ -60,6 +62,7 @@ struct LoginResponse {
     session_token: String,
     franchise_id: Option<Uuid>,
     needs_franchise_setup: bool,
+    network_secret: String,
 }
 
 #[derive(Serialize)]
@@ -168,6 +171,8 @@ async fn create_room(
         let host_hash = hash(&format!("host|{}|{}", room_id, host_key));
         let player_hash = hash(&format!("player|{}", player_join_code));
         let created_at = Utc::now().timestamp();
+        let player_network_secret = format!("p_{}", Uuid::new_v4().simple());
+        let host_network_secret = format!("h_{}", Uuid::new_v4().simple());
 
         // Atomically reserve BOTH identifiers. No room can ever share a player code.
         let script = Script::new(
@@ -182,7 +187,9 @@ async fn create_room(
               'host_name', ARGV[5],
               'starting_purse_lakh', ARGV[6],
               'status', 'open',
-              'created_at', ARGV[7])
+              'created_at', ARGV[7],
+              'player_network_secret', ARGV[8],
+              'host_network_secret', ARGV[9])
             redis.call('SET', KEYS[2], ARGV[1])
             return 1
             "#,
@@ -199,6 +206,8 @@ async fn create_room(
             .arg(if host_name.is_empty() { "Host" } else { &host_name })
             .arg(purse)
             .arg(created_at)
+            .arg(&player_network_secret)
+            .arg(&host_network_secret)
             .invoke_async(&mut conn)
             .await
             .map_err(internal)?;
@@ -252,6 +261,8 @@ async fn host_login(
     let session_token = issue_session(&mut conn, &room_id, None, None, "host")
         .await
         .map_err(internal)?;
+    let network_secret = room.get("host_network_secret").cloned()
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Room host network secret missing".into()))?;
 
     Ok(Json(LoginResponse {
         room_id,
@@ -259,6 +270,7 @@ async fn host_login(
         session_token,
         franchise_id: None,
         needs_franchise_setup: false,
+        network_secret,
     }))
 }
 
@@ -314,6 +326,8 @@ async fn player_login(
     )
     .await
     .map_err(internal)?;
+    let network_secret = room.get("player_network_secret").cloned()
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Room player network secret missing".into()))?;
 
     Ok(Json(LoginResponse {
         room_id,
@@ -321,6 +335,7 @@ async fn player_login(
         session_token,
         franchise_id,
         needs_franchise_setup: franchise_id.is_none(),
+        network_secret,
     }))
 }
 
@@ -345,12 +360,16 @@ async fn create_franchise(
     ))?;
 
     if let Some(fid) = session.franchise_id {
+        let room: HashMap<String, String> = conn.hgetall(room_key(&session.room_id)).await.map_err(internal)?;
+        let network_secret = room.get("player_network_secret").cloned()
+            .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Room player network secret missing".into()))?;
         return Ok(Json(LoginResponse {
             room_id: session.room_id,
             role: "player".into(),
             session_token: input.session_token,
             franchise_id: Some(fid),
             needs_franchise_setup: false,
+            network_secret,
         }));
     }
 
@@ -406,12 +425,17 @@ async fn create_franchise(
         .await
         .map_err(internal)?;
 
+    let room: HashMap<String, String> = conn.hgetall(room_key(&updated_session.room_id)).await.map_err(internal)?;
+    let network_secret = room.get("player_network_secret").cloned()
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Room player network secret missing".into()))?;
+
     Ok(Json(LoginResponse {
         room_id: updated_session.room_id,
         role: "player".into(),
         session_token: input.session_token,
         franchise_id: Some(franchise_id),
         needs_franchise_setup: false,
+        network_secret,
     }))
 }
 
