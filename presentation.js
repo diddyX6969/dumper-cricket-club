@@ -180,22 +180,26 @@ window.addEventListener("storage",(e)=>{
 async function deleteSavedRoom(code){
   const roomId=String(code||"").trim().toUpperCase();
   const saved=findCreated(roomId);
-  if(!saved){renderMyRooms();return alert("This room is not in Your Created Rooms on this browser.");}
-  if(!confirm("Permanently delete room "+roomId+" and all its saved squads, auction, matches and login codes from this browser?"))return false;
+  if(!saved || !saved.hostKey){renderMyRooms();return alert("Only the original room creator can delete this room.");}
+  if(state.room && me.role!=="host" && me.role!==null)return alert("Only the original room creator can delete this room.");
+
+  // The six-character creator Host Key is required for every deletion.
+  const typed=prompt("Enter the private 6-character Host Key for "+roomId+" to delete this room:");
+  if(typed===null)return false;
+  if(typed.trim().toUpperCase()!==saved.hostKey.trim().toUpperCase()){
+    alert("Incorrect Host Key. Room was NOT deleted.");
+    return false;
+  }
+  if(!confirm("Permanently delete "+roomId+" and its saved teams, auction, matches and login codes? This cannot be undone."))return false;
 
   const wasCurrent=state.room?.code===roomId;
-  // Tombstone first. Other open tabs must exit and must never recreate deleted state.
   localStorage.setItem(DEMO_DELETED_PREFIX+roomId,String(Date.now()));
   saveCreated(loadCreated().filter(r=>r.roomId!==roomId));
   localStorage.removeItem(ROOM_PREFIX+roomId);
   localStorage.removeItem(OFFLINE_CACHE_PREFIX+saved.playerCode);
   localStorage.removeItem(MEMBER_PREFIX+saved.playerCode);
-
-  if(wasCurrent){
-    await logoutRoom();
-  }else{
-    renderMyRooms();
-  }
+  if(wasCurrent)await logoutRoom();
+  else renderMyRooms();
   return true;
 }
 async function deleteCurrentRoom(){
