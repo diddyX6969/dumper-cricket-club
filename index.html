@@ -50,7 +50,7 @@
     <button onclick="tab('squads')">Squads</button>
     <button onclick="tab('match')">Match</button>
     <button onclick="tab('standings')">Standings</button>
-    <button id="adminTab" onclick="tab('admin')">Host Admin</button>
+    <button id="adminTab" onclick="tab('admin')">Room Controls</button>
   </nav>
 
   <div id="lobby" class="panel active">
@@ -70,7 +70,7 @@
         <button id="ownerBidBtn" class="bid-btn" onclick="placeBid()">BID NOW</button>
       </div>
       <div id="auctionHostControls" class="card">
-        <h3>Host Auction Desk</h3>
+        <h3>Shared Auction Desk</h3>
         <label>Search player<input id="auctionSearch" placeholder="Search..." oninput="renderAuctionSelect()"></label>
         <label>Player<select id="playerSelect" onchange="hostSelectPlayer(this.value)"></select></label>
         <label>Bid increment<select id="bidStep"><option value="5">₹5L</option><option value="10" selected>₹10L</option><option value="20">₹20L</option><option value="25">₹25L</option><option value="50">₹50L</option><option value="100">₹1Cr</option></select></label>
@@ -99,7 +99,7 @@
         <div id="pitchBox" class="notice">No pitch generated.</div><div id="tossBox" class="notice">Toss not conducted.</div>
       </div>
       <div class="card">
-        <h3>Playing XIs</h3><p class="muted mini">One player per line. Host can edit before every match.</p>
+        <h3>Playing XIs</h3><p class="muted mini">One player per line. Anyone in the room can edit before every match.</p>
         <label>Team A XI<textarea id="xiA" rows="11"></textarea></label>
         <label>Team B XI<textarea id="xiB" rows="11"></textarea></label>
       </div>
@@ -131,7 +131,7 @@
     </div>
     <div class="grid2">
       <div class="card"><h3>Franchise Control</h3><label>Franchise<select id="adminTeam" onchange="loadTeamEditor()"></select></label><label>Team name<input id="adminTeamName"></label><label>Owner name<input id="adminOwnerName"></label><label>Purse ₹L<input id="adminPurse" type="number"></label><div class="actions"><button onclick="saveTeamEdit()">Save Team</button><button class="danger" onclick="removeTeam()">Remove Team</button></div></div>
-      <div class="card"><h3>League Control</h3><div class="actions"><button class="secondary" onclick="resetAuctionState()">Reset Auction State</button><button class="secondary" onclick="document.getElementById('importFile').click()">Import League</button><input id="importFile" class="hidden" type="file" accept=".json" onchange="importLeague(event)"><button class="danger" onclick="factoryReset()">Factory Reset</button></div><p class="muted mini">Host changes are authoritative and are pushed to every connected franchise.</p></div>
+      <div class="card"><h3>League Control</h3><div class="actions"><button class="secondary" onclick="resetAuctionState()">Reset Auction State</button><button class="secondary" onclick="document.getElementById('importFile').click()">Import League</button><input id="importFile" class="hidden" type="file" accept=".json" onchange="importLeague(event)"><button class="danger" onclick="factoryReset()">Factory Reset</button></div><p class="muted mini">Room-control changes are shared with every connected franchise.</p></div>
     </div>
   </div>
 </section>
