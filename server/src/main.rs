@@ -4,18 +4,20 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use rand::{rng, Rng};
+use redis::{aio::ConnectionManager, AsyncCommands, Script};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::{PgPool, Row};
-use std::{env, net::SocketAddr};
+use std::{collections::HashMap, env, net::SocketAddr};
 use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
 
+const SESSION_TTL_SECONDS: i64 = 60 * 60 * 24 * 30;
+
 #[derive(Clone)]
 struct AppState {
-    db: PgPool,
+    redis: ConnectionManager,
 }
 
 #[derive(Deserialize)]
@@ -44,6 +46,13 @@ struct PlayerLoginRequest {
     device_token: Uuid,
 }
 
+#[derive(Deserialize)]
+struct FranchiseRequest {
+    session_token: String,
+    owner_name: String,
+    team_name: String,
+}
+
 #[derive(Serialize)]
 struct LoginResponse {
     room_id: String,
@@ -53,19 +62,30 @@ struct LoginResponse {
     needs_franchise_setup: bool,
 }
 
-#[derive(Deserialize)]
-struct FranchiseRequest {
-    session_token: String,
-    owner_name: String,
-    team_name: String,
-}
-
 #[derive(Serialize)]
 struct RoomSummary {
     room_id: String,
     host_name: String,
     starting_purse_lakh: i32,
     status: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SessionRecord {
+    room_id: String,
+    role: String,
+    franchise_id: Option<Uuid>,
+    device_token: Option<Uuid>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct FranchiseRecord {
+    id: Uuid,
+    room_id: String,
+    device_token: Uuid,
+    owner_name: String,
+    team_name: String,
+    created_at: i64,
 }
 
 fn hash(input: &str) -> String {
@@ -90,30 +110,41 @@ fn new_session_token() -> String {
     format!("dcc_{}", Uuid::new_v4().simple())
 }
 
+fn room_key(room_id: &str) -> String {
+    format!("dcc:room:{}", room_id)
+}
+fn player_index_key(code: &str) -> String {
+    format!("dcc:player-code:{}", code)
+}
+fn session_key(token_hash: &str) -> String {
+    format!("dcc:session:{}", token_hash)
+}
+fn franchise_key(room_id: &str, device: Uuid) -> String {
+    format!("dcc:franchise:{}:{}", room_id, device)
+}
+fn team_index_key(room_id: &str, team: &str) -> String {
+    format!("dcc:team:{}:{}", room_id, hash(&team.trim().to_lowercase()))
+}
+
 async fn issue_session(
-    db: &PgPool,
-    room_db_id: Uuid,
+    redis: &mut ConnectionManager,
+    room_id: &str,
     franchise_id: Option<Uuid>,
     device_token: Option<Uuid>,
     role: &str,
 ) -> anyhow::Result<String> {
     let token = new_session_token();
     let token_hash = hash(&token);
-    let expires_at = Utc::now() + Duration::days(30);
-
-    sqlx::query(
-        "INSERT INTO sessions (room_db_id, franchise_id, device_token, role, token_hash, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6)"
-    )
-    .bind(room_db_id)
-    .bind(franchise_id)
-    .bind(device_token)
-    .bind(role)
-    .bind(token_hash)
-    .bind(expires_at)
-    .execute(db)
-    .await?;
-
+    let record = SessionRecord {
+        room_id: room_id.to_owned(),
+        role: role.to_owned(),
+        franchise_id,
+        device_token,
+    };
+    let payload = serde_json::to_string(&record)?;
+    let _: () = redis
+        .set_ex(session_key(&token_hash), payload, SESSION_TTL_SECONDS as u64)
+        .await?;
     Ok(token)
 }
 
@@ -121,46 +152,77 @@ async fn create_room(
     State(state): State<AppState>,
     Json(input): Json<CreateRoomRequest>,
 ) -> Result<Json<CreateRoomResponse>, (StatusCode, String)> {
-    for _ in 0..20 {
+    let host_name = input
+        .host_name
+        .unwrap_or_else(|| "Host".into())
+        .trim()
+        .chars()
+        .take(80)
+        .collect::<String>();
+    let purse = input.starting_purse_lakh.unwrap_or(12_000).max(1);
+
+    for _ in 0..64 {
         let room_id = new_room_id();
         let host_key = random_code(6);
         let player_join_code = random_code(10);
+        let host_hash = hash(&format!("host|{}|{}", room_id, host_key));
+        let player_hash = hash(&format!("player|{}", player_join_code));
+        let created_at = Utc::now().timestamp();
 
-        let result = sqlx::query(
-            "INSERT INTO rooms
-             (room_id, host_key_hash, player_join_code, player_join_code_hash, host_name, starting_purse_lakh)
-             VALUES ($1,$2,$3,$4,$5,$6)
-             RETURNING id"
-        )
-        .bind(&room_id)
-        .bind(hash(&format!("host|{}|{}", room_id, host_key)))
-        .bind(&player_join_code)
-        .bind(hash(&format!("player|{}", player_join_code)))
-        .bind(input.host_name.clone().unwrap_or_else(|| "Host".into()))
-        .bind(input.starting_purse_lakh.unwrap_or(12_000).max(1))
-        .fetch_one(&state.db)
-        .await;
+        // Atomically reserve BOTH identifiers. No room can ever share a player code.
+        let script = Script::new(
+            r#"
+            if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+            if redis.call('EXISTS', KEYS[2]) == 1 then return 0 end
+            redis.call('HSET', KEYS[1],
+              'room_id', ARGV[1],
+              'host_key_hash', ARGV[2],
+              'player_join_code', ARGV[3],
+              'player_join_code_hash', ARGV[4],
+              'host_name', ARGV[5],
+              'starting_purse_lakh', ARGV[6],
+              'status', 'open',
+              'created_at', ARGV[7])
+            redis.call('SET', KEYS[2], ARGV[1])
+            return 1
+            "#,
+        );
 
-        match result {
-            Ok(row) => {
-                let room_db_id: Uuid = row.get("id");
-                let host_session_token = issue_session(&state.db, room_db_id, None, None, "host")
-                    .await
-                    .map_err(internal)?;
+        let mut conn = state.redis.clone();
+        let created: i32 = script
+            .key(room_key(&room_id))
+            .key(player_index_key(&player_join_code))
+            .arg(&room_id)
+            .arg(&host_hash)
+            .arg(&player_join_code)
+            .arg(&player_hash)
+            .arg(if host_name.is_empty() { "Host" } else { &host_name })
+            .arg(purse)
+            .arg(created_at)
+            .invoke_async(&mut conn)
+            .await
+            .map_err(internal)?;
 
-                return Ok(Json(CreateRoomResponse {
-                    room_id,
-                    host_key,
-                    player_join_code,
-                    host_session_token,
-                }));
-            }
-            Err(sqlx::Error::Database(e)) if e.is_unique_violation() => continue,
-            Err(e) => return Err(internal(e)),
+        if created != 1 {
+            continue;
         }
+
+        let host_session_token = issue_session(&mut conn, &room_id, None, None, "host")
+            .await
+            .map_err(internal)?;
+
+        return Ok(Json(CreateRoomResponse {
+            room_id,
+            host_key,
+            player_join_code,
+            host_session_token,
+        }));
     }
 
-    Err((StatusCode::CONFLICT, "Could not allocate a unique room code".into()))
+    Err((
+        StatusCode::CONFLICT,
+        "Could not allocate unique DCC credentials. Try again.".into(),
+    ))
 }
 
 async fn host_login(
@@ -169,21 +231,25 @@ async fn host_login(
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     let room_id = input.room_id.trim().to_uppercase();
     let host_key = input.host_key.trim().to_uppercase();
-    let expected = hash(&format!("host|{}|{}", room_id, host_key));
 
-    let row = sqlx::query(
-        "SELECT id, room_id FROM rooms
-         WHERE room_id=$1 AND host_key_hash=$2 AND status='open'"
-    )
-    .bind(&room_id)
-    .bind(expected)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .ok_or((StatusCode::UNAUTHORIZED, "Invalid Room ID or Host Key".into()))?;
+    let mut conn = state.redis.clone();
+    let room: HashMap<String, String> = conn
+        .hgetall(room_key(&room_id))
+        .await
+        .map_err(internal)?;
 
-    let room_db_id: Uuid = row.get("id");
-    let session_token = issue_session(&state.db, room_db_id, None, None, "host")
+    if room.is_empty()
+        || room.get("status").map(String::as_str) != Some("open")
+        || room.get("host_key_hash")
+            != Some(&hash(&format!("host|{}|{}", room_id, host_key)))
+    {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Invalid Room ID or Host Key".into(),
+        ));
+    }
+
+    let session_token = issue_session(&mut conn, &room_id, None, None, "host")
         .await
         .map_err(internal)?;
 
@@ -201,34 +267,53 @@ async fn player_login(
     Json(input): Json<PlayerLoginRequest>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     let player_code = input.player_join_code.trim().to_uppercase();
+    let mut conn = state.redis.clone();
 
-    let room = sqlx::query(
-        "SELECT id, room_id FROM rooms
-         WHERE player_join_code=$1 AND player_join_code_hash=$2 AND status='open'"
-    )
-    .bind(&player_code)
-    .bind(hash(&format!("player|{}", player_code)))
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .ok_or((StatusCode::UNAUTHORIZED, "Invalid Player Joining Code".into()))?;
-
-    let room_db_id: Uuid = room.get("id");
-    let room_id: String = room.get("room_id");
-
-    let franchise = sqlx::query(
-        "SELECT id FROM franchises WHERE room_db_id=$1 AND device_token=$2"
-    )
-    .bind(room_db_id)
-    .bind(input.device_token)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?;
-
-    let franchise_id = franchise.map(|r| r.get::<Uuid, _>("id"));
-    let session_token = issue_session(&state.db, room_db_id, franchise_id, Some(input.device_token), "player")
+    // Player code itself resolves to exactly ONE room.
+    let room_id: Option<String> = conn
+        .get(player_index_key(&player_code))
         .await
         .map_err(internal)?;
+    let room_id = room_id.ok_or((
+        StatusCode::UNAUTHORIZED,
+        "Invalid Player Joining Code".into(),
+    ))?;
+
+    let room: HashMap<String, String> = conn
+        .hgetall(room_key(&room_id))
+        .await
+        .map_err(internal)?;
+
+    if room.is_empty()
+        || room.get("status").map(String::as_str) != Some("open")
+        || room.get("player_join_code_hash")
+            != Some(&hash(&format!("player|{}", player_code)))
+    {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Invalid Player Joining Code".into(),
+        ));
+    }
+
+    let existing: Option<String> = conn
+        .get(franchise_key(&room_id, input.device_token))
+        .await
+        .map_err(internal)?;
+
+    let franchise_id = existing
+        .as_deref()
+        .and_then(|json| serde_json::from_str::<FranchiseRecord>(json).ok())
+        .map(|f| f.id);
+
+    let session_token = issue_session(
+        &mut conn,
+        &room_id,
+        franchise_id,
+        Some(input.device_token),
+        "player",
+    )
+    .await
+    .map_err(internal)?;
 
     Ok(Json(LoginResponse {
         room_id,
@@ -243,29 +328,25 @@ async fn create_franchise(
     State(state): State<AppState>,
     Json(input): Json<FranchiseRequest>,
 ) -> Result<Json<LoginResponse>, (StatusCode, String)> {
+    let mut conn = state.redis.clone();
     let token_hash = hash(&input.session_token);
+    let session_json: Option<String> = conn
+        .get(session_key(&token_hash))
+        .await
+        .map_err(internal)?;
+    let session: SessionRecord = session_json
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .filter(|s| s.role == "player")
+        .ok_or((StatusCode::UNAUTHORIZED, "Invalid player session".into()))?;
 
-    let session = sqlx::query(
-        "SELECT s.id, s.room_db_id, s.franchise_id, s.device_token, s.expires_at, r.room_id
-         FROM sessions s
-         JOIN rooms r ON r.id=s.room_db_id
-         WHERE s.token_hash=$1 AND s.role='player' AND s.expires_at > NOW()"
-    )
-    .bind(token_hash)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .ok_or((StatusCode::UNAUTHORIZED, "Invalid player session".into()))?;
+    let device = session.device_token.ok_or((
+        StatusCode::BAD_REQUEST,
+        "Player session has no device identity".into(),
+    ))?;
 
-    let session_id: Uuid = session.get("id");
-    let room_db_id: Uuid = session.get("room_db_id");
-    let room_id: String = session.get("room_id");
-    let device_token: Uuid = session.get::<Option<Uuid>, _>("device_token")
-        .ok_or((StatusCode::BAD_REQUEST, "Player session has no device identity".into()))?;
-
-    if let Some(fid) = session.get::<Option<Uuid>, _>("franchise_id") {
+    if let Some(fid) = session.franchise_id {
         return Ok(Json(LoginResponse {
-            room_id,
+            room_id: session.room_id,
             role: "player".into(),
             session_token: input.session_token,
             franchise_id: Some(fid),
@@ -273,36 +354,60 @@ async fn create_franchise(
         }));
     }
 
-    let inserted = sqlx::query(
-        "INSERT INTO franchises (room_db_id, device_token, owner_name, team_name)
-         VALUES ($1,$2,$3,$4)
-         RETURNING id"
-    )
-    .bind(room_db_id)
-    .bind(device_token)
-    .bind(input.owner_name.trim())
-    .bind(input.team_name.trim())
-    .fetch_one(&state.db)
-    .await;
+    let owner_name = input.owner_name.trim().chars().take(80).collect::<String>();
+    let team_name = input.team_name.trim().chars().take(80).collect::<String>();
+    if owner_name.is_empty() || team_name.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Owner and team name are required".into()));
+    }
 
-    let row = match inserted {
-        Ok(row) => row,
-        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-            return Err((StatusCode::CONFLICT, "That franchise name is already used in this room".into()));
-        }
-        Err(e) => return Err(internal(e)),
+    let team_key = team_index_key(&session.room_id, &team_name);
+    let franchise_id = Uuid::new_v4();
+
+    // Reserve team name atomically inside this room.
+    let reserved: bool = conn
+        .set_nx(&team_key, franchise_id.to_string())
+        .await
+        .map_err(internal)?;
+    if !reserved {
+        return Err((
+            StatusCode::CONFLICT,
+            "That franchise name is already used in this room".into(),
+        ));
+    }
+
+    let record = FranchiseRecord {
+        id: franchise_id,
+        room_id: session.room_id.clone(),
+        device_token: device,
+        owner_name,
+        team_name,
+        created_at: Utc::now().timestamp(),
     };
+    let payload = serde_json::to_string(&record).map_err(internal)?;
 
-    let franchise_id: Uuid = row.get("id");
-    sqlx::query("UPDATE sessions SET franchise_id=$1 WHERE id=$2")
-        .bind(franchise_id)
-        .bind(session_id)
-        .execute(&state.db)
+    if let Err(e) = conn
+        .set::<_, _, ()>(franchise_key(&session.room_id, device), payload)
+        .await
+    {
+        let _: redis::RedisResult<()> = conn.del(&team_key).await;
+        return Err(internal(e));
+    }
+
+    let updated_session = SessionRecord {
+        franchise_id: Some(franchise_id),
+        ..session
+    };
+    let _: () = conn
+        .set_ex(
+            session_key(&token_hash),
+            serde_json::to_string(&updated_session).map_err(internal)?,
+            SESSION_TTL_SECONDS as u64,
+        )
         .await
         .map_err(internal)?;
 
     Ok(Json(LoginResponse {
-        room_id,
+        room_id: updated_session.room_id,
         role: "player".into(),
         session_token: input.session_token,
         franchise_id: Some(franchise_id),
@@ -314,21 +419,31 @@ async fn room_summary(
     State(state): State<AppState>,
     Path(room_id): Path<String>,
 ) -> Result<Json<RoomSummary>, (StatusCode, String)> {
-    let row = sqlx::query(
-        "SELECT room_id, host_name, starting_purse_lakh, status
-         FROM rooms WHERE room_id=$1"
-    )
-    .bind(room_id.to_uppercase())
-    .fetch_optional(&state.db)
-    .await
-    .map_err(internal)?
-    .ok_or((StatusCode::NOT_FOUND, "Room not found".into()))?;
+    let room_id = room_id.trim().to_uppercase();
+    let mut conn = state.redis.clone();
+    let room: HashMap<String, String> = conn
+        .hgetall(room_key(&room_id))
+        .await
+        .map_err(internal)?;
+
+    if room.is_empty() {
+        return Err((StatusCode::NOT_FOUND, "Room not found".into()));
+    }
 
     Ok(Json(RoomSummary {
-        room_id: row.get("room_id"),
-        host_name: row.get("host_name"),
-        starting_purse_lakh: row.get("starting_purse_lakh"),
-        status: row.get("status"),
+        room_id,
+        host_name: room
+            .get("host_name")
+            .cloned()
+            .unwrap_or_else(|| "Host".into()),
+        starting_purse_lakh: room
+            .get("starting_purse_lakh")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(12_000),
+        status: room
+            .get("status")
+            .cloned()
+            .unwrap_or_else(|| "open".into()),
     }))
 }
 
@@ -339,9 +454,17 @@ fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-    let database_url = env::var("DATABASE_URL")?;
-    let db = PgPool::connect(&database_url).await?;
-    sqlx::migrate!("./migrations").run(&db).await?;
+
+    let redis_url = env::var("REDIS_URL")?;
+    let client = redis::Client::open(redis_url)?;
+    let manager = ConnectionManager::new(client).await?;
+
+    // Verify Redis before accepting traffic.
+    let mut probe = manager.clone();
+    let pong: String = redis::cmd("PING").query_async(&mut probe).await?;
+    if pong != "PONG" {
+        anyhow::bail!("Redis health check failed");
+    }
 
     let frontend_origin = env::var("FRONTEND_ORIGIN")
         .unwrap_or_else(|_| "https://diddyx6969.github.io".into());
@@ -360,11 +483,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/franchises", post(create_franchise))
         .route("/api/rooms/{room_id}", get(room_summary))
         .layer(cors)
-        .with_state(AppState { db });
+        .with_state(AppState { redis: manager });
 
-    let port: u16 = env::var("PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(8080);
-    let addr = SocketAddr::from(([0,0,0,0], port));
-    println!("DCC auth server listening on {addr}");
+    let port: u16 = env::var("PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8080);
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    println!("DCC Redis auth server listening on {addr}");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
