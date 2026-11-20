@@ -335,8 +335,8 @@ async fn create_franchise(
         .await
         .map_err(internal)?;
     let session: SessionRecord = session_json
-        .and_then(|v| serde_json::from_str(&v).ok())
-        .filter(|s| s.role == "player")
+        .and_then(|v| serde_json::from_str::<SessionRecord>(&v).ok())
+        .filter(|s: &SessionRecord| s.role == "player")
         .ok_or((StatusCode::UNAUTHORIZED, "Invalid player session".into()))?;
 
     let device = session.device_token.ok_or((
