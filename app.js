@@ -14,7 +14,7 @@ function code(){return "DCC-"+Math.random().toString(36).slice(2,7).toUpperCase(
 function showCreate(){$("#createBox").classList.remove("hidden");$("#joinBox").classList.add("hidden")}
 function showJoin(){$("#joinBox").classList.remove("hidden");$("#createBox").classList.add("hidden")}
 function tab(id){$$(".panel").forEach(x=>x.classList.toggle("active",x.id===id))}
-function enterGame(){$("#landing").classList.remove("active");$("#game").classList.add("active");render()}
+function enterGame(){$("#landing").classList.remove("active");$("#game").classList.add("active");$("#logoutBtn")?.classList.remove("hidden");render()}
 function hostOnly(){if(!["host","owner"].includes(me.role)){alert("Join the room first.");return false}return true}
 function ownerBy(id){return state.franchises.find(f=>f.id===id)}
 function currentPlayer(){return state.players.find(p=>p.id===state.auction.playerId)}
@@ -118,6 +118,17 @@ function handleRemoteCommand(data,userId){
 function sendCommand(data){if(!commandAction||!hostUserId)return alert("Not connected to host.");commandAction.send({...data,ownerId:me.ownerId},{target:hostUserId})}
 
 function copyRoom(){navigator.clipboard?.writeText(state.room?.code||"");}
+async function logoutRoom(){
+  try{await netRoom?.leave()}catch{}
+  netRoom=null;hostUserId=null;
+  sessionStorage.removeItem("dcc-me");
+  setMe({role:null,ownerId:null});
+  $("#game")?.classList.remove("active");
+  $("#landing")?.classList.add("active");
+  $("#logoutBtn")?.classList.add("hidden");
+  setNet("OFFLINE");
+  render();
+}
 function renderAuctionSelect(){
   const q=($("#auctionSearch")?.value||"").trim().toLowerCase(),sel=$("#playerSelect");if(!sel)return;
   const old=sel.value;sel.innerHTML=availablePlayers().filter(p=>!q||p.name.toLowerCase().includes(q)||p.iplTeam.toLowerCase().includes(q)).map(p=>"<option value='"+p.id+"'>"+esc(p.name)+" • "+p.iplTeam+" • "+money(p.basePrice)+"</option>").join("");
@@ -198,6 +209,7 @@ function factoryReset(){if(!hostOnly())return;if(!confirm("Erase/reset this room
 
 function render(){
   $("#roomBadge").textContent=state.room?.code||"NO ROOM";
+  $("#logoutBtn")?.classList.toggle("hidden",!["host","owner"].includes(me.role));
   $("#adminTab")?.classList.remove("hidden");
   $("#auctionHostControls")?.classList.remove("hidden");
   $("#ownerBidBtn")?.classList.toggle("hidden",me.role!=="owner");
