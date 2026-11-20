@@ -15,12 +15,12 @@ function showCreate(){$("#createBox").classList.remove("hidden");$("#joinBox").c
 function showJoin(){$("#joinBox").classList.remove("hidden");$("#createBox").classList.add("hidden")}
 function tab(id){$$(".panel").forEach(x=>x.classList.toggle("active",x.id===id))}
 function enterGame(){$("#landing").classList.remove("active");$("#game").classList.add("active");render()}
-function hostOnly(){if(me.role!=="host"){alert("Only the host can do that.");return false}return true}
+function hostOnly(){if(!["host","owner"].includes(me.role)){alert("Join the room first.");return false}return true}
 function ownerBy(id){return state.franchises.find(f=>f.id===id)}
 function currentPlayer(){return state.players.find(p=>p.id===state.auction.playerId)}
 function availablePlayers(){return state.players.filter(p=>p.active&&p.owner===null)}
 function publicState(){const s=structuredClone(state);if(s.room)delete s.room.hostPass;s.franchises=s.franchises.map(({passHash,...x})=>x);return s}
-function persist(){state.updatedAt=Date.now();saveLocal();if(me.role==="host"&&stateAction)stateAction.send(publicState()).catch(()=>{});render()}
+function persist(){state.updatedAt=Date.now();saveLocal();if(me.role==="host"&&stateAction){stateAction.send(publicState()).catch(()=>{})}else if(me.role==="owner"&&commandAction&&hostUserId){commandAction.send({type:"replaceState",ownerId:me.ownerId,state:publicState()},{target:hostUserId}).catch(()=>{})}render()}
 function setNet(text,ok=false){const el=$("#netBadge");if(!el)return;el.textContent=text;el.classList.toggle("online",ok)}
 
 async function connectNetwork(roomCode,isHost){
@@ -101,7 +101,18 @@ function handleJoinRequest(data,userId){
 function handleRemoteCommand(data,userId){
   const f=state.franchises.find(x=>x.id===data.ownerId&&x.userId===userId);
   if(!f)return;
-  if(data.type==="bid")processBid(f.id);
+  if(data.type==="bid"){processBid(f.id);return}
+  if(data.type==="replaceState"&&data.state){
+    const incoming=data.state;
+    if(!incoming.players||!incoming.franchises||!incoming.auction)return;
+    const oldPass=new Map(state.franchises.map(x=>[x.id,x.passHash]));
+    const hostPass=state.room?.hostPass;
+    state=incoming;
+    if(state.room&&hostPass)state.room.hostPass=hostPass;
+    state.franchises=state.franchises.map(x=>({...x,passHash:oldPass.get(x.id)||x.passHash}));
+    state.feed.unshift("⚙️ "+f.team+" changed room controls.");
+    persist();
+  }
 }
 
 function sendCommand(data){if(!commandAction||!hostUserId)return alert("Not connected to host.");commandAction.send({...data,ownerId:me.ownerId},{target:hostUserId})}
@@ -183,12 +194,12 @@ function standings(){return state.franchises.map(f=>{let P=0,W=0,L=0,T=0,NR=0,rf
 
 function exportLeague(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));a.download=(state.room?.code||"dcc")+"-league.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 function importLeague(e){if(!hostOnly())return;const file=e.target.files?.[0];if(!file)return;file.text().then(t=>{const d=JSON.parse(t);if(!d.players||!d.franchises||!d.matches)throw 0;state=d;persist()}).catch(()=>alert("Invalid DCC league file."))}
-function factoryReset(){if(!hostOnly())return;if(!confirm("Erase this league from this host browser?"))return;localStorage.removeItem("dcc-state-v3");sessionStorage.removeItem("dcc-me");location.reload()}
+function factoryReset(){if(!hostOnly())return;if(!confirm("Erase/reset this room state from your browser?"))return;localStorage.removeItem("dcc-state-v3");sessionStorage.removeItem("dcc-me");location.reload()}
 
 function render(){
   $("#roomBadge").textContent=state.room?.code||"NO ROOM";
-  $("#adminTab")?.classList.toggle("hidden",me.role!=="host");
-  $("#auctionHostControls")?.classList.toggle("hidden",me.role!=="host");
+  $("#adminTab")?.classList.remove("hidden");
+  $("#auctionHostControls")?.classList.remove("hidden");
   $("#ownerBidBtn")?.classList.toggle("hidden",me.role!=="owner");
   if(!state.room)return;
   $("#roomTitle").textContent=state.room.code;
@@ -202,10 +213,10 @@ function render(){
 function renderAuction(){const p=currentPlayer();$("#aName").textContent=p?.name||"Choose a player";$("#aMeta").textContent=p?(p.iplTeam+" • "+p.role+" • Base "+money(p.basePrice)):"";$("#aBid").textContent=state.auction.bid?money(state.auction.bid):"—";$("#aLeader").textContent=state.auction.leader?(ownerBy(state.auction.leader)?.team||"Unknown")+" leads":"No bids";$("#aTimer").textContent=state.auction.running?Math.max(0,Math.ceil((state.auction.endsAt-Date.now())/1000)):"—";$("#auctionFeed").innerHTML=state.feed.slice(0,100).map(x=>"<div>"+esc(x)+"</div>").join("")||"<span class='muted'>Auction has not started.</span>"}
 function renderSquads(){$("#squadGrid").innerHTML=state.franchises.map(f=>{const sq=state.players.filter(p=>p.owner===f.id&&p.active);return "<div class='teamCard'><h4>"+esc(f.team)+"</h4><div class='money'>"+money(f.purse)+" left</div><p>"+sq.length+" players</p><ol>"+sq.map(p=>"<li>"+esc(p.name)+" <span class='muted'>"+money(p.soldPrice)+" • "+p.role+"</span></li>").join("")+"</ol></div>"}).join("")||"<span class='muted'>No squads yet.</span>"}
 function renderTeamSelects(){const opts=state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");for(const id of ["teamA","teamB"]){const el=$("#"+id);if(!el)continue;const old=el.value;el.innerHTML=opts;if([...el.options].some(o=>o.value===old))el.value=old}$("#pitchBox").textContent=state.pitch?state.pitch.name+" — "+state.pitch.desc:"No pitch generated.";$("#tossBox").textContent=state.toss?(ownerBy(state.toss.winner)?.team+" won the toss and chose to "+state.toss.choice):"Toss not conducted."}
-function renderAdmin(){if(me.role!=="host")return;const psel=$("#editPlayer"),oldp=psel.value;psel.innerHTML=state.players.filter(p=>p.active).map(p=>"<option value='"+p.id+"'>"+esc(p.name)+"</option>").join("");if([...psel.options].some(o=>o.value===oldp))psel.value=oldp;const teams="<option value=''>Unassigned</option>"+state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");$("#assignTeam").innerHTML=teams;const tsel=$("#adminTeam"),oldt=tsel.value;tsel.innerHTML=state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");if([...tsel.options].some(o=>o.value===oldt))tsel.value=oldt;loadPlayerEditor();loadTeamEditor()}
+function renderAdmin(){const psel=$("#editPlayer"),oldp=psel.value;psel.innerHTML=state.players.filter(p=>p.active).map(p=>"<option value='"+p.id+"'>"+esc(p.name)+"</option>").join("");if([...psel.options].some(o=>o.value===oldp))psel.value=oldp;const teams="<option value=''>Unassigned</option>"+state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");$("#assignTeam").innerHTML=teams;const tsel=$("#adminTeam"),oldt=tsel.value;tsel.innerHTML=state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");if([...tsel.options].some(o=>o.value===oldt))tsel.value=oldt;loadPlayerEditor();loadTeamEditor()}
 function renderMatch(m){const a=ownerBy(m.a),b=ownerBy(m.b);if(!a||!b)return;$("#scoreboard").innerHTML="<div class='scoreline'><span>"+esc(a.team)+"</span><b>"+m.i1.runs+"/"+m.i1.wickets+"</b><small>"+(m.i1.balls/6).toFixed(1)+" ov</small></div><div class='scoreline'><span>"+esc(b.team)+"</span><b>"+m.i2.runs+"/"+m.i2.wickets+"</b><small>"+(m.i2.balls/6).toFixed(1)+" ov</small></div><p class='muted'>"+esc(m.pitch)+"</p>";$("#matchResult").textContent=m.tied?"TIED":(ownerBy(m.winner)?.team||"")+" WON";$("#commentary").innerHTML=m.i1.events.concat(m.i2.events).slice(-100).map(x=>"<div>"+esc(x)+"</div>").join("");$("#advice").innerHTML="<div class='notice'><b>Brutal review:</b> "+esc(roastFor(m))+"</div><div class='notice'><b>Improvement:</b> "+esc(adviceFor(m))+"</div>"}
 function renderStandings(){const rows=standings();$("#pointsBody").innerHTML=rows.map((r,i)=>"<tr><td>"+(i+1)+"</td><td>"+esc(r.team)+"</td><td>"+r.P+"</td><td>"+r.W+"</td><td>"+r.L+"</td><td>"+r.T+"</td><td>"+r.NR+"</td><td><b>"+r.pts+"</b></td><td>"+r.nrr.toFixed(3)+"</td></tr>").join("");const sr=Object.entries(state.stats).map(([id,s])=>({p:state.players.find(x=>x.id===id),...s})).filter(x=>x.p);$("#batLeaders").innerHTML=[...sr].sort((a,b)=>b.runs-a.runs).slice(0,10).map((x,i)=>"<p>"+(i+1)+". "+esc(x.p.name)+" — <b>"+x.runs+" runs</b></p>").join("")||"No matches yet.";$("#bowlLeaders").innerHTML=[...sr].sort((a,b)=>b.wickets-a.wickets).slice(0,10).map((x,i)=>"<p>"+(i+1)+". "+esc(x.p.name)+" — <b>"+x.wickets+" wickets</b></p>").join("")||"No matches yet.";$("#mvpLeaders").innerHTML=[...sr].sort((a,b)=>(b.runs+b.wickets*25)-(a.runs+a.wickets*25)).slice(0,10).map((x,i)=>"<p>"+(i+1)+". "+esc(x.p.name)+" — <b>"+(x.runs+x.wickets*25)+" pts</b></p>").join("")||"No matches yet.";$("#bestTeam").innerHTML=rows[0]?"<h2>"+esc(rows[0].team)+"</h2><p>"+rows[0].pts+" points • NRR "+rows[0].nrr.toFixed(3)+"</p>":"No matches yet."}
 
 window.addEventListener("beforeunload",()=>{try{netRoom?.leave()}catch{}});
 render();
-if(state.room&&me.role==="host"){enterGame();connectNetwork(state.room.code,true);if(state.auction.running)runTimer()}
+if(state.room&&me.role==="host"){enterGame();connectNetwork(state.room.code,true);if(state.auction.running)runTimer()}else if(state.room&&me.role==="owner"){enterGame();connectNetwork(state.room.code,false)}
