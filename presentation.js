@@ -47,7 +47,7 @@ registerFranchise=function(){
   const token=demoToken(activePlayerCode);
   if(fresh.franchises.some(f=>f.team.toLowerCase()===team.toLowerCase()&&f.memberToken!==token))return alert("That franchise name is already taken.");
   let f=fresh.franchises.find(x=>x.memberToken===token);
-  if(!f){f={id:crypto.randomUUID(),owner,team,purse:fresh.room.startPurse,memberToken:token,joinedAt:Date.now(),online:true};fresh.franchises.push(f)}
+  if(!f){if(fresh.franchises.length>=MAX_FRANCHISES)return alert("This room already has 20 teams.");f={id:crypto.randomUUID(),owner,team,purse:fresh.room.startPurse,memberToken:token,joinedAt:Date.now(),online:true};fresh.franchises.push(f)}
   else{f.owner=owner;f.team=team}
   fresh.members??=[];
   let member=fresh.members.find(x=>x.memberToken===token);
