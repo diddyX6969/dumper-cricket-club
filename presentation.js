@@ -17,6 +17,10 @@ const demoFormats={
 };
 const demoRead=(roomId)=>{if(localStorage.getItem(DEMO_DELETED_PREFIX+roomId))return null;const s=roomSnapshot(roomId);return s?.room?.code===roomId?s:null};
 function demoToken(code){const k=demoMemberPrefix+code;let t=sessionStorage.getItem(k);if(!t){t=crypto.randomUUID();sessionStorage.setItem(k,t)}return t}
+async function demoRoomLock(roomId,callback){
+  if(navigator.locks?.request)return navigator.locks.request("dcc-room-seat:"+roomId,callback);
+  return callback();
+}
 function demoRole(role,ownerId,roomCode){me={role,ownerId:ownerId||null,roomCode};saveSession()}
 function demoCommit(){if(!state.room)return;state.updatedAt=Date.now();localStorage.setItem(ROOM_PREFIX+state.room.code,JSON.stringify(state));render()}
 function demoWho(){return (state.competitions||[]).find(c=>c.id===state.activeCompetitionId)||null}
@@ -25,11 +29,30 @@ joinAsPlayer=async function(){
   const code=$("#playerJoinCodeInput").value.trim().toUpperCase();
   if(!/^[A-Z0-9]{10}$/.test(code)||!/[A-Z]/.test(code)||!/[0-9]/.test(code))return alert("Enter your 10-character Player Joining Code.");
   const room=loadCreated().find(r=>r.playerCode===code);
-  const fresh=room&&demoRead(room.roomId);
-  if(!fresh)return alert("Room not found on this browser. For the presentation, create the room first and open a second tab to Join Room.");
-  activeHostKey=null;activePlayerCode=code;state=migrateState(fresh);
-  const f=state.franchises.find(x=>x.memberToken===demoToken(code));
-  demoRole(f?"owner":"member",f?.id,room.roomId);
+  if(!room)return alert("This room is not available on this browser. For the presentation, use a second tab of the creator's browser.");
+  const token=demoToken(code);
+  const result=await demoRoomLock(room.roomId,()=>{
+    const fresh=demoRead(room.roomId);
+    if(!fresh)return {error:"This room has been deleted."};
+    fresh.members??=[];
+    let member=fresh.members.find(x=>x.memberToken===token);
+    if(!member){
+      if(fresh.members.length>=MAX_ROOM_PLAYERS)return {error:"This room is full. 20 players have already joined."};
+      member={memberToken:token,joinedAt:Date.now(),lastSeen:Date.now(),online:true,owner:"Pending setup",team:"Not assigned",ownerId:null};
+      fresh.members.push(member);
+    }else{
+      member.online=true;
+      member.lastSeen=Date.now();
+    }
+    const franchise=fresh.franchises.find(x=>x.memberToken===token);
+    if(franchise){member.owner=franchise.owner;member.team=franchise.team;member.ownerId=franchise.id}
+    fresh.updatedAt=Date.now();
+    localStorage.setItem(ROOM_PREFIX+room.roomId,JSON.stringify(fresh));
+    return {fresh,ownerId:franchise?.id||null};
+  });
+  if(result.error)return alert(result.error);
+  activeHostKey=null;activePlayerCode=code;state=migrateState(result.fresh);
+  demoRole(result.ownerId?"owner":"member",result.ownerId,room.roomId);
   enterGame();setNet("DEMO · LOCAL",true);
 };
 joinAsHost=async function(){
@@ -38,23 +61,31 @@ joinAsHost=async function(){
   if(!saved||saved.hostKey!==key)return alert("Invalid Room ID or Host Key for this browser.");
   await openCreatedRoom(roomId);
 };
-registerFranchise=function(){
+registerFranchise=async function(){
   if(me.role!=="member"||!state.room)return alert("Join Room as a player first.");
   const owner=$("#memberOwnerName").value.trim().slice(0,80),team=$("#memberTeamName").value.trim().slice(0,80);
   if(!owner||!team)return alert("Enter your name and franchise name.");
-  const fresh=demoRead(state.room.code);
-  if(!fresh)return alert("The room has been deleted.");
-  const token=demoToken(activePlayerCode);
-  if(fresh.franchises.some(f=>f.team.toLowerCase()===team.toLowerCase()&&f.memberToken!==token))return alert("That franchise name is already taken.");
-  let f=fresh.franchises.find(x=>x.memberToken===token);
-  if(!f){if(fresh.franchises.length>=MAX_FRANCHISES)return alert("This room already has 20 teams.");f={id:crypto.randomUUID(),owner,team,purse:fresh.room.startPurse,memberToken:token,joinedAt:Date.now(),online:true};fresh.franchises.push(f)}
-  else{f.owner=owner;f.team=team}
-  fresh.members??=[];
-  let member=fresh.members.find(x=>x.memberToken===token);
-  if(!member){member={memberToken:token,joinedAt:Date.now()};fresh.members.push(member)}
-  Object.assign(member,{owner,team,ownerId:f.id,online:true,lastSeen:Date.now()});
-  fresh.updatedAt=Date.now();localStorage.setItem(ROOM_PREFIX+fresh.room.code,JSON.stringify(fresh));
-  state=migrateState(fresh);demoRole("owner",f.id,fresh.room.code);render();
+  const roomId=state.room.code,token=demoToken(activePlayerCode);
+  const result=await demoRoomLock(roomId,()=>{
+    const fresh=demoRead(roomId);
+    if(!fresh)return {error:"The room has been deleted."};
+    fresh.members??=[];
+    const member=fresh.members.find(x=>x.memberToken===token);
+    if(!member)return {error:"Join the room with your Player Code before creating a franchise."};
+    if(fresh.franchises.some(f=>f.team.toLowerCase()===team.toLowerCase()&&f.memberToken!==token))return {error:"That franchise name is already taken."};
+    let f=fresh.franchises.find(x=>x.memberToken===token);
+    if(!f){
+      if(fresh.franchises.length>=MAX_FRANCHISES)return {error:"This room already has 20 teams."};
+      f={id:crypto.randomUUID(),owner,team,purse:fresh.room.startPurse,memberToken:token,joinedAt:Date.now(),online:true};
+      fresh.franchises.push(f);
+    }else{f.owner=owner;f.team=team}
+    Object.assign(member,{owner,team,ownerId:f.id,online:true,lastSeen:Date.now()});
+    fresh.updatedAt=Date.now();
+    localStorage.setItem(ROOM_PREFIX+fresh.room.code,JSON.stringify(fresh));
+    return {fresh,ownerId:f.id};
+  });
+  if(result.error)return alert(result.error);
+  state=migrateState(result.fresh);demoRole("owner",result.ownerId,roomId);render();
 };
 sendCommand=function(){
   if(me.role!=="owner"||!state.room)return alert("Only a franchise owner can bid.");
@@ -142,7 +173,7 @@ function demoRenderCompetition(){
   $("#seriesStandings").innerHTML=c?rows.map((r,i)=>"<p>"+(i+1)+". "+esc(r.f.team)+" — "+r.wins+" wins / "+r.played+" played</p>").join(""):"No competition selected.";
   if(host){
     const players=state.members||[];
-    $("#joinedCount").textContent=players.length+" joined";
+    $("#joinedCount").textContent=players.length+" / "+MAX_ROOM_PLAYERS+" joined";
     $("#joinedOnlineCount").textContent=players.filter(x=>x.online).length+" recently connected · "+state.franchises.length+" teams registered";
     $("#playerJoinList").innerHTML=players.map((x,i)=>"<div class='demo-fixture'>"+(i+1)+". "+esc(x.owner||"Pending setup")+" · "+esc(x.team||"Not assigned")+"</div>").join("")||"<p class='muted'>No players joined yet.</p>";
   }
