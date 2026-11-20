@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     room_db_id UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     franchise_id UUID REFERENCES franchises(id) ON DELETE CASCADE,
+    device_token UUID,
     role VARCHAR(10) NOT NULL CHECK (role IN ('host','player')),
     token_hash CHAR(64) NOT NULL UNIQUE,
     expires_at TIMESTAMPTZ NOT NULL,
