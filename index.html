@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dumper Cricket Club</title>
+<link rel="stylesheet" href="./styles.css"/>
+</head>
+<body>
+<div id="app">
+<header class="top">
+  <div>
+    <h1>DUMPER CRICKET CLUB</h1>
+    <p>Host-controlled IPL auction + cricket simulator</p>
+  </div>
+  <div id="roomBadge" class="badge">OFFLINE</div>
+</header>
+
+<main>
+<section id="landing" class="view active">
+  <div class="hero card">
+    <h2>Build the room. Run the auction. Own the league.</h2>
+    <p>DCC is a multiplayer-first auction and match-simulation game. The host controls everything.</p>
+    <div class="actions">
+      <button onclick="showCreate()">Create Room</button>
+      <button class="secondary" onclick="showJoin()">Join Room</button>
+    </div>
+  </div>
+
+  <div id="createBox" class="card hidden">
+    <h3>Create Room</h3>
+    <label>Host name<input id="hostName" placeholder="Hitesh"/></label>
+    <label>Host ID<input id="hostId" placeholder="admin"/></label>
+    <label>Password<input id="hostPass" type="password"/></label>
+    <label>Starting purse (₹ Cr)<input id="startPurse" type="number" min="1" value="120"/></label>
+    <button onclick="createRoom()">Create</button>
+  </div>
+
+  <div id="joinBox" class="card hidden">
+    <h3>Join Room</h3>
+    <label>Room code<input id="joinCode" placeholder="DCC-AB12"/></label>
+    <label>Your ID<input id="joinId"/></label>
+    <label>Password<input id="joinPass" type="password"/></label>
+    <label>Your name<input id="ownerName"/></label>
+    <label>Team name<input id="teamName"/></label>
+    <button onclick="joinRoom()">Join</button>
+  </div>
+</section>
+
+<section id="game" class="view">
+<nav class="tabs">
+  <button onclick="tab('lobby')">Lobby</button>
+  <button onclick="tab('auction')">Auction</button>
+  <button onclick="tab('squads')">Squads</button>
+  <button onclick="tab('match')">Match</button>
+  <button onclick="tab('standings')">Standings</button>
+  <button onclick="tab('admin')">Host Admin</button>
+</nav>
+
+<div id="lobby" class="panel active">
+  <div class="grid2">
+    <div class="card">
+      <h3>Room</h3>
+      <div id="roomInfo"></div>
+      <button class="secondary" onclick="copyRoom()">Copy room code</button>
+    </div>
+    <div class="card">
+      <h3>Franchises</h3>
+      <div id="franchiseList"></div>
+    </div>
+  </div>
+</div>
+
+<div id="auction" class="panel">
+  <div class="grid2">
+    <div class="card">
+      <div class="eyebrow">ON THE BLOCK</div>
+      <h2 id="aName">—</h2>
+      <div id="aMeta" class="muted"></div>
+      <div class="price" id="aBid">—</div>
+      <div id="aLeader" class="muted">No bids</div>
+      <div class="timer" id="aTimer">00</div>
+    </div>
+    <div class="card">
+      <h3>Auction Controls</h3>
+      <label>Player<select id="playerSelect" onchange="hostSelectPlayer(this.value)"></select></label>
+      <label>Bid increment<select id="bidStep"><option value="5">₹5L</option><option value="10" selected>₹10L</option><option value="20">₹20L</option><option value="50">₹50L</option><option value="100">₹1Cr</option></select></label>
+      <label>Timer<select id="timerSec"><option>10</option><option selected>15</option><option>20</option><option>30</option><option>45</option></select></label>
+      <div class="actions">
+        <button onclick="startAuction()">Start</button>
+        <button onclick="placeBid()">Bid</button>
+        <button class="gold" onclick="sellPlayer()">SOLD</button>
+        <button class="secondary" onclick="markUnsold()">Unsold</button>
+      </div>
+    </div>
+  </div>
+  <div class="card"><h3>Live auction feed</h3><div id="auctionFeed" class="feed"></div></div>
+</div>
+
+<div id="squads" class="panel">
+  <div class="card"><h3>Squads & Purses</h3><div id="squadGrid" class="cards"></div></div>
+</div>
+
+<div id="match" class="panel">
+  <div class="grid2">
+    <div class="card">
+      <h3>Match Setup</h3>
+      <label>Team A<select id="teamA"></select></label>
+      <label>Team B<select id="teamB"></select></label>
+      <label>Format<select id="format"><option value="20">T20</option><option value="50">ODI</option><option value="10">T10</option><option value="5">5-over</option><option value="90">Test-style session</option><option value="custom">Custom</option></select></label>
+      <label>Custom overs<input id="customOvers" type="number" value="20" min="1" max="450"/></label>
+      <label>Bias Team A (-30 to +30)<input id="biasA" type="number" value="0" min="-30" max="30"/></label>
+      <label>Bias Team B (-30 to +30)<input id="biasB" type="number" value="0" min="-30" max="30"/></label>
+      <div class="actions">
+        <button onclick="generatePitch()">Generate Pitch</button>
+        <button onclick="conductToss()">Toss</button>
+        <button class="gold" onclick="simulateMatch()">Simulate Match</button>
+      </div>
+      <div id="pitchBox" class="notice"></div>
+      <div id="tossBox" class="notice"></div>
+    </div>
+    <div class="card">
+      <h3>Playing XI</h3>
+      <p class="muted">Host can paste one player per line. If blank, the first 11 squad players are used.</p>
+      <label>Team A XI<textarea id="xiA" rows="12"></textarea></label>
+      <label>Team B XI<textarea id="xiB" rows="12"></textarea></label>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Match Centre</h3>
+    <div id="scoreboard"></div>
+    <div id="commentary" class="feed"></div>
+    <div id="advice"></div>
+  </div>
+</div>
+
+<div id="standings" class="panel">
+  <div class="card">
+    <h3>IPL-style Points Table</h3>
+    <div class="tableWrap"><table><thead><tr><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NR</th><th>Pts</th><th>NRR</th></tr></thead><tbody id="pointsBody"></tbody></table></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Best Batters</h3><div id="batLeaders"></div></div>
+    <div class="card"><h3>Best Bowlers</h3><div id="bowlLeaders"></div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Best Players</h3><div id="mvpLeaders"></div></div>
+    <div class="card"><h3>Best Team</h3><div id="bestTeam"></div></div>
+  </div>
+</div>
+
+<div id="admin" class="panel">
+  <div class="grid2">
+    <div class="card">
+      <h3>Host Player Control</h3>
+      <label>Name<input id="newPlayerName"/></label>
+      <label>Role<select id="newPlayerRole"><option>Batter</option><option>Bowler</option><option>All-rounder</option><option>Wicketkeeper</option></select></label>
+      <label>Base price (₹ lakh)<input id="newPlayerPrice" type="number" value="20"/></label>
+      <button onclick="addCustomPlayer()">Add Player</button>
+    </div>
+    <div class="card">
+      <h3>Host Overrides</h3>
+      <label>Player<select id="editPlayer"></select></label>
+      <label>New base price (₹ lakh)<input id="editPrice" type="number"/></label>
+      <div class="actions">
+        <button onclick="changeBasePrice()">Change Price</button>
+        <button class="secondary" onclick="removePlayer()">Remove Player</button>
+        <button class="secondary" onclick="resetAuctionState()">Reset Auction</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Peer Sync (GitHub-only mode)</h3>
+    <p class="muted">This build synchronizes same-origin tabs instantly through BroadcastChannel. Cross-device GitHub-only play will use manual WebRTC offer/answer in the next networking pass.</p>
+  </div>
+</div>
+</section>
+</main>
+</div>
+<script src="./players.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
