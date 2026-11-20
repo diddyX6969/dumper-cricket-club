@@ -73,6 +73,13 @@
     <button class="gold wide-action" onclick="joinAsHost()">Join Room</button>
   </div>
 
+  <div id="pendingLoginBox" class="card hidden narrow">
+    <div class="eyebrow">PLAYER CONNECTION</div>
+    <h3>Waiting for this room</h3>
+    <p id="pendingLoginMessage" class="muted">We have your Player Joining Code. The creator must come online to verify a first-time login.</p>
+    <button class="secondary" onclick="backFromPending()">Back to Join Room</button>
+  </div>
+
   <div id="myRoomsCard" class="card hidden">
     <h3>Your Created Rooms</h3>
     <p class="muted mini">Saved on this browser. Open a room to continue hosting it.</p>
@@ -91,6 +98,7 @@
   </nav>
 
   <div id="lobby" class="panel active">
+    <div id="offlineNotice" class="notice hidden"><b>Saved offline view</b> · The room creator is offline. You can review previously synced squads, results and standings. Bidding and changes resume when the host reconnects.</div>
     <div id="roleBanner" class="notice">Your room</div>
     <div id="memberSetup" class="card hidden narrow"><h3>Create Your Franchise</h3><p class="muted mini">You have entered the room as a player. Choose your in-game name and franchise before bidding.</p><label>Your name<input id="memberOwnerName" maxlength="80" placeholder="Owner name"></label><label>Franchise name<input id="memberTeamName" maxlength="80" placeholder="Your team"></label><button onclick="registerFranchise()">Create Franchise</button></div>
     <div class="grid2">
@@ -123,6 +131,39 @@
   <div id="squads" class="panel"><div class="card"><div class="section-title"><h3>Franchise Squads</h3><span id="soldCounter" class="muted"></span></div><div id="squadGrid" class="cards"></div></div></div>
 
   <div id="match" class="panel">
+    <div class="card">
+      <div class="section-title"><h3>Current Competition</h3><span id="competitionStatus" class="badge">No series selected</span></div>
+      <div id="competitionSummary" class="muted">The host can choose an ODI, T20, World Cup, Test or custom series.</div>
+      <div id="competitionHostSetup" class="competition-host">
+        <div class="grid2">
+          <label>Series / Tournament
+            <select id="seriesPreset" onchange="chooseSeriesPreset()">
+              <option value="ipl">IPL — T20 League</option>
+              <option value="t20-series">Bilateral T20 Series</option>
+              <option value="odi-series">Bilateral ODI Series</option>
+              <option value="t20-world-cup">ICC Men's T20 World Cup</option>
+              <option value="odi-world-cup">ICC Cricket World Cup (ODI)</option>
+              <option value="test-series">Bilateral Test Series</option>
+              <option value="wtc">World Test Championship</option>
+              <option value="ashes">The Ashes — Test Series</option>
+              <option value="champions-trophy">Champions Trophy — ODI</option>
+              <option value="asia-cup-t20">Asia Cup — T20</option>
+              <option value="asia-cup-odi">Asia Cup — ODI</option>
+              <option value="t10-league">T10 Tournament</option>
+              <option value="custom">Custom Series / Tournament</option>
+            </select>
+          </label>
+          <label>Competition name<input id="seriesName" maxlength="70" placeholder="e.g. DCC World Cup 2027"></label>
+        </div>
+        <div class="grid2 compact">
+          <label>Matches per pairing / series<input id="seriesMatches" type="number" min="1" max="30" value="1"></label>
+          <label>Custom overs (if custom)<input id="seriesOvers" type="number" min="1" max="120" value="20"></label>
+        </div>
+        <p id="seriesHelp" class="muted mini"></p>
+        <div class="actions"><button onclick="createCompetition()">Create Series</button>
+        <label class="inline-series-select">Active series<select id="activeSeriesSelect" onchange="activateCompetition(this.value)"></select></label></div>
+      </div>
+    </div>
     <div id="matchHostControls" class="grid2">
       <div class="card">
         <h3>Host Match Setup</h3>
@@ -147,7 +188,11 @@
   </div>
 
   <div id="standings" class="panel">
-    <div class="card"><h3>IPL-style Points Table</h3><div class="tableWrap"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NR</th><th>Pts</th><th>NRR</th></tr></thead><tbody id="pointsBody"></tbody></table></div></div>
+    <div class="card">
+      <h3>Active Series Standings</h3>
+      <div id="seriesStandings" class="muted">The host has not selected a competition yet.</div>
+    </div>
+    <div class="card"><h3>Overall League Points Table</h3><div class="tableWrap"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NR</th><th>Pts</th><th>NRR</th></tr></thead><tbody id="pointsBody"></tbody></table></div></div>
     <div class="grid2"><div class="card"><h3>Best Batters</h3><div id="batLeaders"></div></div><div class="card"><h3>Best Bowlers</h3><div id="bowlLeaders"></div></div></div>
     <div class="grid2"><div class="card"><h3>Best Players</h3><div id="mvpLeaders"></div></div><div class="card"><h3>Best Team</h3><div id="bestTeam"></div></div></div>
   </div>
