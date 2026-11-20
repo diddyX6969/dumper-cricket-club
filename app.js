@@ -28,6 +28,7 @@ function saveSession(){sessionStorage.setItem(SESSION_KEY,JSON.stringify({me,act
 function setMe(data){me=data;saveSession()}
 function deviceToken(code){let t=localStorage.getItem(MEMBER_PREFIX+code);if(!t){t=crypto.randomUUID();localStorage.setItem(MEMBER_PREFIX+code,t)}return t}
 const MAX_FRANCHISES=20;
+const MAX_ROOM_PLAYERS=20;
 function ownerBy(id){return state.franchises.find(f=>f.id===id)}
 function currentPlayer(){return state.players.find(p=>p.id===state.auction.playerId)}
 function availablePlayers(){return state.players.filter(p=>p.active&&p.owner===null)}
@@ -66,14 +67,22 @@ function loginPending(expectedRole){clearTimeout(loginTimeout);loginTimeout=setT
 async function connectPlayerRoomAsHost(code){
   try{await playerNet?.leave()}catch{}playerNet=null;playerActions=null;approvedPlayers.clear();
   const join=await loadTrystero();
-  playerNet=join({appId:"diddyx6969/dcc-player-v8",password:code,identity:"none"},"dcc-player-"+code);
+  playerNet=join({appId:"diddyx6969/dcc-player-v8",password:code,identity:"none",maxUsers:MAX_ROOM_PLAYERS+1},"dcc-player-"+code);
   playerActions=attachActions(playerNet);
   playerActions.hello.onMessage((data,ctx)=>{
     if(me.role!=="host"||data?.type!=="player-join"||!data.deviceToken)return;
     const f=state.franchises.find(x=>x.memberToken===data.deviceToken);
     approvedPlayers.set(ctx.userId,data.deviceToken);
     let member=(state.members||[]).find(x=>x.memberToken===data.deviceToken);
-    if(!member){member={memberToken:data.deviceToken,joinedAt:Date.now(),lastSeen:Date.now(),online:true,owner:"Pending setup",team:"Not assigned",ownerId:null};state.members.push(member)}
+    if(!member){
+      if(state.members.length>=MAX_ROOM_PLAYERS){
+        playerActions.reply.send({ok:false,error:"This room is full (20 players)."},{target:ctx.userId}).catch(console.warn);
+        approvedPlayers.delete(ctx.userId);
+        return;
+      }
+      member={memberToken:data.deviceToken,joinedAt:Date.now(),lastSeen:Date.now(),online:true,owner:"Pending setup",team:"Not assigned",ownerId:null};
+      state.members.push(member);
+    }
     member.userId=ctx.userId;member.online=true;member.lastSeen=Date.now();
     if(f){f.userId=ctx.userId;f.online=true;member.owner=f.owner;member.team=f.team;member.ownerId=f.id}
     persist();
@@ -122,7 +131,7 @@ async function connectPlayer(code){
   await closeNetworks();
   setNet("FINDING ROOM");
   const join=await loadTrystero();
-  playerNet=join({appId:"diddyx6969/dcc-player-v8",password:code,identity:"none"},"dcc-player-"+code);
+  playerNet=join({appId:"diddyx6969/dcc-player-v8",password:code,identity:"none",maxUsers:MAX_ROOM_PLAYERS+1},"dcc-player-"+code);
   playerActions=attachActions(playerNet);
   const sendHello=(target)=>playerActions?.hello.send({type:"player-join",deviceToken:deviceToken(code)},{target}).catch(console.warn);
   playerNet.onUserJoin(({userId})=>sendHello(userId),{replay:true});
