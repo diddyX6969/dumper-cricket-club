@@ -239,6 +239,7 @@ async function deleteCurrentRoom(){
 }
 async function factoryReset(){return deleteCurrentRoom()}
 (async function restorePresentationSession(){
+  if(window.DCC_ONLINE)return;
   try{
     const saved=JSON.parse(sessionStorage.getItem(SESSION_KEY)||"null");
     if(!saved?.me?.roomCode)return;
