@@ -1,0 +1,13 @@
+{
+  "name": "dcc-room-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DCC cross-device room coordination service",
+  "main": "room-server.cjs",
+  "scripts": {
+    "start": "node room-server.cjs"
+  },
+  "dependencies": {
+    "redis": "^5.0.0"
+  }
+}
