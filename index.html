@@ -31,13 +31,11 @@
 
   <div id="joinBox" class="card hidden narrow">
     <h3>Join Room</h3>
-    <label>Room code<input id="joinCode" placeholder="DCC-AB12"></label>
-    <label>Your ID<input id="joinId" placeholder="owner-id"></label>
-    <label>Password<input id="joinPass" type="password"></label>
-    <label>Your name<input id="ownerName" placeholder="Owner name"></label>
+    <label>Room code<input id="joinCode" placeholder="DCC-AB12" autocomplete="off"></label>
+    <label>Your name<input id="ownerName" placeholder="Your name"></label>
     <label>Franchise name<input id="teamName" placeholder="Team name"></label>
-    <button onclick="joinRoom()">Join Room</button>
-    <p class="muted mini">Enter the room code from the host. Connection happens automatically.</p>
+    <button class="big-action" onclick="joinRoom()">Join Room</button>
+    <p class="muted mini">That’s it. Your private owner ID and password are generated automatically and saved on this device.</p>
   </div>
 
   </section>
