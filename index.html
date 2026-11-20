@@ -17,7 +17,7 @@
   <div class="hero card">
     <div class="eyebrow">DCC • LIVE CRICKET AUCTION</div>
     <h2>Create a room. Invite players. Own the auction.</h2>
-    <p>Every room gets its own private host login and one simple player invitation code. No usernames or passwords to enter the room.</p>
+    <p>Every room gets its own private host login and one simple player invitation code. This presentation build works in tabs of the same browser without a server.</p>
     <div class="actions entry-actions">
       <button onclick="showCreate()">Create Room</button>
       <button class="secondary" onclick="showJoin()">Join Room</button>
@@ -106,11 +106,13 @@
         <h3>Presentation Demo</h3>
         <p class="muted mini">Set up two complete teams instantly, then run an auction and a match. The demo works locally without a server.</p>
         <div class="actions"><button class="gold" onclick="preparePresentationDemo()">Prepare Demo Teams</button><button class="secondary" onclick="tab('auction')">Open Auction</button><button class="secondary" onclick="tab('match')">Open Match</button></div>
+         <div class="actions"><button class="secondary" onclick="demoPlaceBid(0)">Demo Bid · Team A</button><button class="secondary" onclick="demoPlaceBid(1)">Demo Bid · Team B</button></div>
       </div>
       <div id="hostPlayerMonitor" class="card hidden">
         <div class="section-title"><h3>Player Join Monitor · Host Only</h3><span class="badge" id="joinedCount">0 joined</span></div>
         <p class="muted mini" id="joinedOnlineCount">0 online · 0 registered</p>
         <div id="playerJoinList" class="joined-list"></div>
+        <div id="franchiseList" class="hidden"></div>
       </div>
     </div>
     <div class="card"><h3>League Pulse</h3><div id="leaguePulse" class="stats-grid"></div></div>
@@ -234,5 +236,6 @@
 </main>
 
 <footer>DCC • GitHub Pages peer-to-peer edition • Unofficial fan game</footer>
-<script src="./players.js"></script><script src="./app.js"></script>
+<script>window.DCC_PRESENTATION = true;</script>
+<script src="./players.js"></script><script src="./app.js"></script><script src="./presentation.js"></script>
 </body></html>
