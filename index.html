@@ -37,21 +37,11 @@
     <label>Password<input id="joinPass" type="password"></label>
     <label>Your name<input id="ownerName" placeholder="Owner name"></label>
     <label>Franchise name<input id="teamName" placeholder="Team name"></label>
-    <button onclick="prepareJoin()">Continue to connection</button>
-    <p class="muted mini">Because this game is hosted only on GitHub Pages, cross-device rooms use an encrypted peer-to-peer WebRTC handshake instead of a server.</p>
+    <button onclick="joinRoom()">Join Room</button>
+    <p class="muted mini">Enter the room code from the host. Connection happens automatically.</p>
   </div>
 
-  <div id="joinNetBox" class="card hidden">
-    <h3>Connect to Host</h3>
-    <div class="step"><b>1.</b> Paste the invite token the host sent you.</div>
-    <textarea id="guestOffer" rows="5" placeholder="Paste host invite token"></textarea>
-    <button onclick="guestMakeAnswer()">Generate Response Token</button>
-    <div class="step"><b>2.</b> Send this response token back to the host.</div>
-    <textarea id="guestAnswer" rows="5" readonly></textarea>
-    <button class="secondary" onclick="copyText('guestAnswer')">Copy Response</button>
-    <div id="guestConnectStatus" class="notice">Not connected.</div>
-  </div>
-</section>
+  </section>
 
 <section id="game" class="view">
   <nav class="tabs">
@@ -60,7 +50,6 @@
     <button onclick="tab('squads')">Squads</button>
     <button onclick="tab('match')">Match</button>
     <button onclick="tab('standings')">Standings</button>
-    <button onclick="tab('network')">Room Network</button>
     <button id="adminTab" onclick="tab('admin')">Host Admin</button>
   </nav>
 
@@ -122,17 +111,6 @@
     <div class="card"><h3>IPL-style Points Table</h3><div class="tableWrap"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NR</th><th>Pts</th><th>NRR</th></tr></thead><tbody id="pointsBody"></tbody></table></div></div>
     <div class="grid2"><div class="card"><h3>Best Batters</h3><div id="batLeaders"></div></div><div class="card"><h3>Best Bowlers</h3><div id="bowlLeaders"></div></div></div>
     <div class="grid2"><div class="card"><h3>Best Players</h3><div id="mvpLeaders"></div></div><div class="card"><h3>Best Team</h3><div id="bestTeam"></div></div></div>
-  </div>
-
-  <div id="network" class="panel">
-    <div class="grid2">
-      <div id="hostNetwork" class="card">
-        <h3>Invite Franchise Owner</h3><p class="muted mini">Create one invite per device. Send the token privately to the player.</p>
-        <button onclick="hostCreateInvite()">Create Invite Token</button><textarea id="hostOffer" rows="6" readonly></textarea><button class="secondary" onclick="copyText('hostOffer')">Copy Invite</button>
-        <h4>Accept Response</h4><textarea id="hostAnswer" rows="6" placeholder="Paste response token from player"></textarea><button onclick="hostAcceptAnswer()">Connect Player</button>
-      </div>
-      <div class="card"><h3>Connection Status</h3><div id="peerList"></div><div class="notice">GitHub-only networking uses WebRTC DataChannels with public STUN servers. The host browser must stay online. Some restrictive NAT/firewall combinations can still block peer-to-peer connections.</div></div>
-    </div>
   </div>
 
   <div id="admin" class="panel">
