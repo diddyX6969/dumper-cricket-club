@@ -64,7 +64,7 @@
       <button class="big-action" onclick="registerFranchise()">Create Franchise</button>
     </div>
     <div class="grid2">
-      <div class="card"><div class="eyebrow">ROOM</div><h2 id="roomTitle">—</h2><div id="roomInfo"></div><div class="actions"><button class="secondary" onclick="copyRoom()">Copy Room Code</button><button class="secondary" onclick="exportLeague()">Export League</button></div></div>
+      <div class="card"><div class="eyebrow">ROOM</div><h2 id="roomTitle">—</h2><div id="roomInfo"></div><div id="hostLobbyControls" class="actions"><button class="secondary" onclick="copyRoomInvite()">Copy Room Login</button><button class="secondary" onclick="exportLeague()">Export League</button></div></div>
       <div class="card"><div class="eyebrow">CONNECTED FRANCHISES</div><div id="franchiseList"></div></div>
     </div>
     <div class="card"><h3>League Pulse</h3><div id="leaguePulse" class="stats-grid"></div></div>
@@ -93,9 +93,9 @@
   <div id="squads" class="panel"><div class="card"><div class="section-title"><h3>Franchise Squads</h3><span id="soldCounter" class="muted"></span></div><div id="squadGrid" class="cards"></div></div></div>
 
   <div id="match" class="panel">
-    <div class="grid2">
+    <div id="matchHostControls" class="grid2">
       <div class="card">
-        <h3>Match Setup</h3>
+        <h3>Host Match Setup</h3>
         <label>Team A<select id="teamA" onchange="fillXI()"></select></label>
         <label>Team B<select id="teamB" onchange="fillXI()"></select></label>
         <label>Format<select id="format" onchange="formatChanged()"><option value="ipl">IPL / T20</option><option value="t20">T20</option><option value="odi">ODI</option><option value="test">Test</option><option value="t10">T10</option><option value="custom">Custom Overs</option></select></label>
