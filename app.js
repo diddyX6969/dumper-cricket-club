@@ -375,23 +375,27 @@ function importLeague(event){
     state=migrateState(data);persist();
   }).catch(()=>alert("That league file is invalid or belongs to another room."));
 }
-async function factoryReset(){
-  if(me.role!=="host")return alert("Only the room creator may delete a room.");
-  if(!confirm("Delete this room and all its saved league data from this browser? This cannot be undone."))return;
-  const code=state.room?.code;
-  saveCreated(loadCreated().filter(x=>x.roomId!==code));
-  if(code)localStorage.removeItem(ROOM_PREFIX+code);
-  await logoutRoom();
-}
 async function deleteSavedRoom(code){
-  const room=findCreated(code);
-  if(!room)return;
-  if(!confirm("Delete room "+code+" from this browser? Its creator credentials and league snapshot will be permanently removed here."))return;
-  saveCreated(loadCreated().filter(r=>r.roomId!==code));
-  localStorage.removeItem(ROOM_PREFIX+code);
-  if(state.room?.code===code&&me.role==="host")await logoutRoom();
-  renderMyRooms();
+  const roomId=String(code||"").trim().toUpperCase();
+  const saved=findCreated(roomId);
+  if(!saved?.hostKey)return alert("Only the original room creator can delete this room.");
+  if(state.room && me.role!=="host" && me.role!==null)return alert("Only the original room creator can delete this room.");
+  const entered=prompt("Enter the private 6-character Host Key for "+roomId+" to delete this room:");
+  if(entered===null)return false;
+  if(entered.trim().toUpperCase()!==saved.hostKey.trim().toUpperCase())return alert("Incorrect Host Key. Room was NOT deleted.");
+  if(!confirm("Permanently delete room "+roomId+" and all its saved data?"))return false;
+  saveCreated(loadCreated().filter(r=>r.roomId!==roomId));
+  localStorage.removeItem(ROOM_PREFIX+roomId);
+  localStorage.removeItem(OFFLINE_CACHE_PREFIX+saved.playerCode);
+  if(state.room?.code===roomId)await logoutRoom();
+  else renderMyRooms();
+  return true;
 }
+async function deleteCurrentRoom(){
+  if(me.role!=="host"||!state.room?.code)return alert("Only the original room creator can delete this room.");
+  return deleteSavedRoom(state.room.code);
+}
+async function factoryReset(){return deleteCurrentRoom()}
 
 function render(){
   const host=me.role==="host"||me.role==="admin";
@@ -401,6 +405,7 @@ function render(){
   $("#auctionHostControls")?.classList.toggle("hidden",!host);
   $("#matchHostControls")?.classList.toggle("hidden",!host);
   $("#hostLobbyControls")?.classList.toggle("hidden",!host);
+  $("#deleteRoomButton")?.classList.toggle("hidden",me.role!=="host");
   $("#ownerBidBtn")?.classList.toggle("hidden",me.role!=="owner");
   $("#memberSetup")?.classList.toggle("hidden",me.role!=="member");
   if(!state.room){renderMyRooms();return}
