@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07111d"><title>DCC Login Templates</title>
+<style>
+:root{--bg:#06101b;--panel:#0b1b2b;--line:#233c54;--text:#eef6ff;--muted:#8da4b8;--gold:#f6c75a;--blue:#4f8cff;--green:#5dd49a}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#102a45 0,#06101b 36%);color:var(--text);font:15px/1.5 Inter,system-ui,Arial,sans-serif}button,input{font:inherit}.page{max-width:1460px;margin:auto;padding:28px}.top{display:flex;justify-content:space-between;gap:18px;align-items:end;margin-bottom:22px}.top h1{margin:0;font-size:clamp(30px,5vw,58px);line-height:1}.top p{margin:8px 0 0;color:var(--muted);max-width:760px}.back{color:#d9e8f7;text-decoration:none;border:1px solid var(--line);padding:10px 14px;border-radius:10px}.logic{background:#081b2b;border:1px solid #31516d;border-radius:16px;padding:16px 18px;margin-bottom:24px}.logic b{color:var(--gold)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.template{border:1px solid var(--line);border-radius:22px;overflow:hidden;background:#091724;box-shadow:0 18px 55px #0005}.template-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}.template-head h2{font-size:18px;margin:0}.template-head p{margin:2px 0 0;color:var(--muted);font-size:12px}.tag{font-size:11px;padding:6px 9px;border-radius:999px;background:#17324c;color:#b9d6ed}.preview{min-height:500px;padding:18px}.switch{display:flex;gap:7px;margin-bottom:14px}.switch button{border:1px solid #34506a;background:#0c1d2d;color:#bcd0e1;padding:7px 10px;border-radius:9px;cursor:pointer}.switch button.active{background:#e9f2ff;color:#0a1520}.screen{display:none}.screen.active{display:block}.field{display:block;margin:11px 0}.field span{display:block;font-size:12px;opacity:.72;margin-bottom:6px}.field input{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #38526a;background:#071522;color:#fff}.cta{width:100%;padding:13px;border:0;border-radius:10px;font-weight:900;cursor:pointer}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mini{font-size:12px;opacity:.7}.code{font-family:ui-monospace,monospace;letter-spacing:.13em;font-weight:900}.pane{max-width:440px;margin:50px auto 0}.ey{color:#85a9c6;font-size:11px;letter-spacing:.15em}.create{background:var(--gold);color:#111}.join{background:#2e6fdb;color:white}
+.t1 .mock{background:linear-gradient(135deg,#07111c,#10263a);border:1px solid #2c465d;border-radius:18px;padding:26px;min-height:435px}.t1 h3{font-size:34px;line-height:1.05;margin:8px 0}
+.t2 .mock{background:#07110d;border:1px solid #244b37;border-radius:18px;min-height:435px;position:relative;overflow:hidden}.t2 .content{position:relative;padding:28px}.t2 h3{font-size:38px;margin:35px 0 8px}.t2 .scorebug{display:inline-flex;padding:7px 10px;background:#f3c85d;color:#162014;font-weight:900;border-radius:5px}.t2 .cta{background:#1f7a4e;color:white}.t2 .join{background:#e9f6ee;color:#14341f}
+.t3 .mock{min-height:435px;border-radius:18px;background:linear-gradient(160deg,#151515,#080808);border:1px solid #2c2c2c;padding:25px}.t3 .box{max-width:410px;margin:42px auto;padding:24px;border:1px solid #333;border-radius:12px;background:#101010}.t3 h3{font-size:30px;margin:5px 0 18px}.t3 .cta{background:#f3f3f3;color:#111}.t3 .join{background:#1d1d1d;color:#fff;border:1px solid #3c3c3c}
+.t4 .mock{min-height:435px;border-radius:18px;background:radial-gradient(circle at 20% 10%,#365b8430,transparent 35%),linear-gradient(145deg,#0c1a2c,#111b29);border:1px solid #3b536b;padding:1px}.t4 .glass{max-width:440px;margin:38px auto;padding:24px;background:#ffffff0d;backdrop-filter:blur(18px);border:1px solid #ffffff25;border-radius:22px}.t4 h3{font-size:32px;margin:5px 0 14px}.t4 .cta{background:#cde5ff;color:#102032}.t4 .join{background:#ffffff12;color:#fff;border:1px solid #ffffff25}
+.t5 .mock{min-height:435px;border-radius:18px;background:#f1f4f8;color:#182332;padding:24px;border:1px solid #dce3eb}.t5 .phone{width:min(100%,360px);margin:auto;background:#fff;border-radius:28px;padding:20px;box-shadow:0 18px 45px #52607033}.t5 h3{font-size:28px;margin:8px 0 16px}.t5 .field input{background:white;color:#182332;border-color:#cdd6df}.t5 .cta{background:#162d4a;color:#fff}.t5 .join{background:#e9edf2;color:#1b2c40}
+.t6 .mock{min-height:435px;border-radius:18px;background:linear-gradient(135deg,#120e18,#21172b);border:1px solid #513861;padding:24px}.t6 .console{max-width:490px;margin:30px auto;border:1px solid #624878;background:#170f20;border-radius:14px;overflow:hidden}.t6 .console-top{padding:10px 14px;background:#24162e;color:#b9a4c7;font-size:11px;letter-spacing:.12em}.t6 .console-body{padding:22px}.t6 h3{margin:0 0 18px;font-size:30px}.t6 .cta{background:#b87cff;color:#1b0f25}.t6 .join{background:#261a31;color:#e6d9ef;border:1px solid #5a3c6f}
+.pickbar{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 18px;border-top:1px solid var(--line);background:#07131f}.pickbar code{color:var(--gold);font-weight:900}.pickbar button{background:#1e6cdf;color:white;border:0;border-radius:9px;padding:9px 12px;font-weight:800;cursor:pointer}.selected{outline:3px solid #4e8cff;outline-offset:2px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.page{padding:16px}.top{align-items:start;flex-direction:column}.preview{padding:12px}.two{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="top"><div><h1>DCC Login System Templates</h1><p>Preview-only gallery. Nothing here changes the live game yet. Choose the visual style first, then that template can be integrated into DCC.</p></div><a class="back" href="./">← Back to DCC</a></div>
+  <div class="logic"><b>Fixed logic in all six:</b> <b>Create Room</b> and <b>Join Room</b> stay exactly named. Join Room splits into Player and Host. Player uses only a 10-character Player Joining Code. Host uses Room ID + 6-character Host Key.</div>
+  <div class="grid"><article class="template t1" data-template="1">
+    <div class="template-head"><div><h2>Classic Split</h2><p>Simple and easiest to understand</p></div><span class="tag">Template 01</span></div>
+    <div class="preview">
+      <div class="switch">
+        <button class="active" onclick="setScreen(1,'home',this)">Home</button>
+        <button onclick="setScreen(1,'player',this)">Player</button>
+        <button onclick="setScreen(1,'host',this)">Host</button>
+      </div>
+      <div class="mock">
+        <div class="screen active" data-screen="home"><div class="pane"><div class="ey">DUMPER CRICKET CLUB</div><h3>Create or Join a Room</h3><p class="mini">No username. No password. Pick what you want to do.</p><div class="two"><button class="cta create">Create Room</button><button class="cta join">Join Room</button></div></div></div>
+        <div class="screen" data-screen="player"><div class="pane"><div class="ey">PLAYER LOGIN</div><h3>Join as Player</h3><p class="mini">Enter only the code sent by the room creator.</p><label class="field"><span>Player Joining Code</span><input class="code" value="K7M4X9P2QA"></label><button class="cta join">Join Room</button></div></div>
+        <div class="screen" data-screen="host"><div class="pane"><div class="ey">HOST LOGIN</div><h3>Host Access</h3><div class="two"><label class="field"><span>Room ID</span><input class="code" value="DCC-A7K9P2"></label><label class="field"><span>Host Key</span><input class="code" value="Q8M4X2"></label></div><button class="cta create">Join Room</button></div></div>
+      </div>
+    </div>
+    <div class="pickbar"><code>#01</code><button onclick="selectTemplate(1)">Choose Template 01</button></div>
+  </article><article class="template t2" data-template="2">
+    <div class="template-head"><div><h2>Cricket Broadcast</h2><p>Feels like a live cricket event</p></div><span class="tag">Template 02</span></div>
+    <div class="preview">
+      <div class="switch">
+        <button class="active" onclick="setScreen(2,'home',this)">Home</button>
+        <button onclick="setScreen(2,'player',this)">Player</button>
+        <button onclick="setScreen(2,'host',this)">Host</button>
+      </div>
+      <div class="mock">
+        <div class="screen active" data-screen="home"><div class="content"><span class="scorebug">DCC LIVE</span><h3>AUCTION ROOM</h3><p class="mini">Create a new league room or enter one already running.</p><div class="two"><button class="cta">Create Room</button><button class="cta join">Join Room</button></div></div></div>
+        <div class="screen" data-screen="player"><div class="content"><span class="scorebug">PLAYER ENTRY</span><h3>YOUR INVITE CODE</h3><label class="field"><span>10-character Player Joining Code</span><input class="code" value="K7M4X9P2QA"></label><button class="cta">Join Room</button></div></div>
+        <div class="screen" data-screen="host"><div class="content"><span class="scorebug">HOST CONTROL</span><h3>ROOM AUTHORITY</h3><div class="two"><label class="field"><span>Room ID</span><input class="code" value="DCC-A7K9P2"></label><label class="field"><span>6-char Host Key</span><input class="code" value="Q8M4X2"></label></div><button class="cta">Join Room</button></div></div>
+      </div>
+    </div>
+    <div class="pickbar"><code>#02</code><button onclick="selectTemplate(2)">Choose Template 02</button></div>
+  </article><article class="template t3" data-template="3">
+    <div class="template-head"><div><h2>Ultra Minimal</h2><p>Cleanest possible interface</p></div><span class="tag">Template 03</span></div>
+    <div class="preview">
+      <div class="switch">
+        <button class="active" onclick="setScreen(3,'home',this)">Home</button>
+        <button onclick="setScreen(3,'player',this)">Player</button>
+        <button onclick="setScreen(3,'host',this)">Host</button>
+      </div>
+      <div class="mock">
+        <div class="screen active" data-screen="home"><div class="box"><div class="mini">DCC</div><h3>Room Access</h3><div class="two"><button class="cta">Create Room</button><button class="cta join">Join Room</button></div></div></div>
+        <div class="screen" data-screen="player"><div class="box"><div class="mini">PLAYER</div><h3>Enter Code</h3><label class="field"><input class="code" value="K7M4X9P2QA"></label><button class="cta">Join Room</button></div></div>
+        <div class="screen" data-screen="host"><div class="box"><div class="mini">HOST</div><h3>Room Login</h3><label class="field"><span>Room ID</span><input class="code" value="DCC-A7K9P2"></label><label class="field"><span>Host Key</span><input class="code" value="Q8M4X2"></label><button class="cta">Join Room</button></div></div>
+      </div>
+    </div>
+    <div class="pickbar"><code>#03</code><button onclick="selectTemplate(3)">Choose Template 03</button></div>
+  </article><article class="template t4" data-template="4">
+    <div class="template-head"><div><h2>Glass Premium</h2><p>Premium modern visual style</p></div><span class="tag">Template 04</span></div>
+    <div class="preview">
+      <div class="switch">
+        <button class="active" onclick="setScreen(4,'home',this)">Home</button>
+        <button onclick="setScreen(4,'player',this)">Player</button>
+        <button onclick="setScreen(4,'host',this)">Host</button>
+      </div>
+      <div class="mock">
+        <div class="screen active" data-screen="home"><div class="glass"><div class="mini">DCC ROOM ACCESS</div><h3>Ready to play?</h3><p class="mini">Start your own room or join your host.</p><div class="two"><button class="cta">Create Room</button><button class="cta join">Join Room</button></div></div></div>
+        <div class="screen" data-screen="player"><div class="glass"><div class="mini">PLAYER LOGIN</div><h3>Your invite</h3><label class="field"><span>Player Joining Code</span><input class="code" value="K7M4X9P2QA"></label><button class="cta">Join Room</button></div></div>
+        <div class="screen" data-screen="host"><div class="glass"><div class="mini">HOST LOGIN</div><h3>Private access</h3><div class="two"><label class="field"><span>Room ID</span><input class="code" value="DCC-A7K9P2"></label><label class="field"><span>Host Key</span><input class="code" value="Q8M4X2"></label></div><button class="cta">Join Room</button></div></div>
+      </div>
+    </div>
+    <div class="pickbar"><code>#04</code><button onclick="selectTemplate(4)">Choose Template 04</button></div>
+  </article><article class="template t5" data-template="5">
+    <div class="template-head"><div><h2>Mobile First</h2><p>Best for phone-heavy users</p></div><span class="tag">Template 05</span></div>
+    <div class="preview">
+      <div class="switch">
+        <button class="active" onclick="setScreen(5,'home',this)">Home</button>
+        <button onclick="setScreen(5,'player',this)">Player</button>
+        <button onclick="setScreen(5,'host',this)">Host</button>
+      </div>
+      <div class="mock">
+        <div class="screen active" data-screen="home"><div class="phone"><div class="mini">DCC</div><h3>Welcome</h3><button class="cta">Create Room</button><div style="height:8px"></div><button class="cta join">Join Room</button></div></div>
+        <div class="screen" data-screen="player"><div class="phone"><div class="mini">PLAYER LOGIN</div><h3>Join Room</h3><label class="field"><span>Player Joining Code</span><input class="code" value="K7M4X9P2QA"></label><button class="cta">Join Room</button></div></div>
+        <div class="screen" data-screen="host"><div class="phone"><div class="mini">HOST LOGIN</div><h3>Join Room</h3><label class="field"><span>Room ID</span><input class="code" value="DCC-A7K9P2"></label><label class="field"><span>Host Key</span><input class="code" value="Q8M4X2"></label><button class="cta">Join Room</button></div></div>
+      </div>
+    </div>
+    <div class="pickbar"><code>#05</code><button onclick="selectTemplate(5)">Choose Template 05</button></div>
+  </article><article class="template t6" data-template="6">
+    <div class="template-head"><div><h2>Control Console</h2><p>Strong admin/tournament personality</p></div><span class="tag">Template 06</span></div>
+    <div class="preview">
+      <div class="switch">
+        <button class="active" onclick="setScreen(6,'home',this)">Home</button>
+        <button onclick="setScreen(6,'player',this)">Player</button>
+        <button onclick="setScreen(6,'host',this)">Host</button>
+      </div>
+      <div class="mock">
+        <div class="screen active" data-screen="home"><div class="console"><div class="console-top">DCC // ROOM ACCESS</div><div class="console-body"><h3>SELECT MODE</h3><div class="two"><button class="cta">Create Room</button><button class="cta join">Join Room</button></div></div></div></div>
+        <div class="screen" data-screen="player"><div class="console"><div class="console-top">PLAYER // AUTH</div><div class="console-body"><h3>JOIN ROOM</h3><label class="field"><span>Player Joining Code</span><input class="code" value="K7M4X9P2QA"></label><button class="cta">Join Room</button></div></div></div>
+        <div class="screen" data-screen="host"><div class="console"><div class="console-top">HOST // PRIVATE ACCESS</div><div class="console-body"><h3>JOIN ROOM</h3><label class="field"><span>Room ID</span><input class="code" value="DCC-A7K9P2"></label><label class="field"><span>6-char Host Key</span><input class="code" value="Q8M4X2"></label><button class="cta">Join Room</button></div></div></div>
+      </div>
+    </div>
+    <div class="pickbar"><code>#06</code><button onclick="selectTemplate(6)">Choose Template 06</button></div>
+  </article></div>
+</div>
+<script>
+function setScreen(template,screen,button){
+  const card=document.querySelector('[data-template="'+template+'"]');
+  card.querySelectorAll('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===screen));
+  card.querySelectorAll('.switch button').forEach(x=>x.classList.remove('active'));
+  button.classList.add('active');
+}
+function selectTemplate(n){
+  document.querySelectorAll('.template').forEach(x=>x.classList.remove('selected'));
+  const el=document.querySelector('[data-template="'+n+'"]');el.classList.add('selected');
+  localStorage.setItem('dcc-login-template-choice',String(n));
+}
+const saved=localStorage.getItem('dcc-login-template-choice');
+if(saved){const el=document.querySelector('[data-template="'+saved+'"]');if(el)el.classList.add('selected')}
+</script>
+</body></html>
