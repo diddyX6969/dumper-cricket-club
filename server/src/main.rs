@@ -94,6 +94,7 @@ async fn issue_session(
     db: &PgPool,
     room_db_id: Uuid,
     franchise_id: Option<Uuid>,
+    device_token: Option<Uuid>,
     role: &str,
 ) -> anyhow::Result<String> {
     let token = new_session_token();
@@ -101,11 +102,12 @@ async fn issue_session(
     let expires_at = Utc::now() + Duration::days(30);
 
     sqlx::query(
-        "INSERT INTO sessions (room_db_id, franchise_id, role, token_hash, expires_at)
-         VALUES ($1,$2,$3,$4,$5)"
+        "INSERT INTO sessions (room_db_id, franchise_id, device_token, role, token_hash, expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6)"
     )
     .bind(room_db_id)
     .bind(franchise_id)
+    .bind(device_token)
     .bind(role)
     .bind(token_hash)
     .bind(expires_at)
@@ -142,7 +144,7 @@ async fn create_room(
         match result {
             Ok(row) => {
                 let room_db_id: Uuid = row.get("id");
-                let host_session_token = issue_session(&state.db, room_db_id, None, "host")
+                let host_session_token = issue_session(&state.db, room_db_id, None, None, "host")
                     .await
                     .map_err(internal)?;
 
@@ -224,7 +226,7 @@ async fn player_login(
     .map_err(internal)?;
 
     let franchise_id = franchise.map(|r| r.get::<Uuid, _>("id"));
-    let session_token = issue_session(&state.db, room_db_id, franchise_id, "player")
+    let session_token = issue_session(&state.db, room_db_id, franchise_id, Some(input.device_token), "player")
         .await
         .map_err(internal)?;
 
@@ -244,7 +246,7 @@ async fn create_franchise(
     let token_hash = hash(&input.session_token);
 
     let session = sqlx::query(
-        "SELECT s.id, s.room_db_id, s.franchise_id, s.expires_at, r.room_id
+        "SELECT s.id, s.room_db_id, s.franchise_id, s.device_token, s.expires_at, r.room_id
          FROM sessions s
          JOIN rooms r ON r.id=s.room_db_id
          WHERE s.token_hash=$1 AND s.role='player' AND s.expires_at > NOW()"
@@ -258,6 +260,8 @@ async fn create_franchise(
     let session_id: Uuid = session.get("id");
     let room_db_id: Uuid = session.get("room_db_id");
     let room_id: String = session.get("room_id");
+    let device_token: Uuid = session.get::<Option<Uuid>, _>("device_token")
+        .ok_or((StatusCode::BAD_REQUEST, "Player session has no device identity".into()))?;
 
     if let Some(fid) = session.get::<Option<Uuid>, _>("franchise_id") {
         return Ok(Json(LoginResponse {
@@ -269,7 +273,6 @@ async fn create_franchise(
         }));
     }
 
-    let device_token = Uuid::new_v4();
     let inserted = sqlx::query(
         "INSERT INTO franchises (room_db_id, device_token, owner_name, team_name)
          VALUES ($1,$2,$3,$4)
