@@ -23,6 +23,7 @@ function migrateState(s){
     }
   }
   if(s.room&&!Array.isArray(s.room.userCodes))s.room.userCodes=[];
+  if(s.room&&!s.room.hostChallenge)s.room.hostChallenge=crypto.randomUUID();
   s.version=5;
   return s;
 }
