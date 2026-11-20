@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#081c14">
+<title>DCC · Match Testing Host</title>
+<link rel="stylesheet" href="./styles.css">
+<style>
+.lab-shell{max-width:1420px;margin:auto;padding:20px 4vw 50px}
+.lab-top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.lab-top h1{margin:0;color:var(--cream);font-size:clamp(25px,4vw,44px)}
+.lab-top a{color:var(--cream);text-decoration:none;padding:10px 15px;border:1px solid var(--line);border-radius:11px}
+.lab-sub{color:var(--muted);margin:10px 0 20px}
+.lab-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.lab-ribbon{padding:12px 15px;border:1px solid #b89d65;background:#242817;border-radius:13px;margin:14px 0;color:#f6dfa9;font-size:14px}
+.lab-box{background:#07180f;border:1px solid #38654d;border-radius:12px;padding:14px;margin:12px 0}
+.lab-box h3{margin:0 0 8px}
+.lab-actions{display:flex;gap:10px;flex-wrap:wrap}
+.lab-actions button{flex:1;min-width:125px}
+.lab-tag{display:inline-block;border-radius:999px;background:#214a34;border:1px solid #4c775a;color:#d9ebd9;font-size:12px;padding:4px 9px}
+.lab-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.lab-metrics>div{background:#081810;border:1px solid #355d45;border-radius:12px;padding:13px}
+.lab-metrics span{display:block;color:#a8beac;font-size:12px}
+.lab-metrics strong{font-size:19px}
+.lab-score{display:grid;grid-template-columns:1fr auto;gap:14px;border-bottom:1px solid #41634d;padding:14px 0}
+.lab-score b{font-size:25px;color:#f6ce70}
+.lab-score small{display:block;color:#95afa1}
+.lab-feed{max-height:330px;overflow:auto}
+.lab-feed div{border-left:3px solid #bda05a;background:#071810;margin:7px 0;padding:9px 12px;border-radius:6px}
+.lab-innings{margin:15px 0}
+.lab-innings h3{margin:8px 0}
+.lab-table{overflow-x:auto}
+.lab-table table{width:100%;font-size:13px}
+.lab-table th,.lab-table td{padding:7px}
+.lab-muted{color:#a5b8ab}
+.lab-lab-only{color:#e9be78;font-weight:800}
+#testXI_A,#testXI_B{font-family:ui-monospace,monospace;min-height:232px}
+#testReport{white-space:pre-wrap;line-height:1.7}
+@media(max-width:850px){.lab-grid{grid-template-columns:1fr}.lab-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.lab-shell{padding:15px}}
+</style>
+</head>
+<body>
+<main class="lab-shell">
+  <div class="lab-top">
+    <div><div class="eyebrow">DUMPER CRICKET CLUB · ISOLATED TEST MODE</div><h1>Match Testing Host</h1></div>
+    <a href="./">Back to Create Room / Join Room</a>
+  </div>
+  <p class="lab-sub">Build two test XIs, generate a pitch, conduct the toss, and run matches repeatedly. This laboratory has no room login, players, auction, Redis calls, or influence on live league records.</p>
+  <div class="lab-ribbon">TEST SANDBOX · No real room data is read or changed. Match results do not affect the league points table, player ownership, or budgets.</div>
+
+  <div class="lab-grid">
+    <section class="card">
+      <h2>Match Setup</h2>
+      <div class="lab-grid">
+        <label>Team A<input id="testTeamA" maxlength="40" value="Mumbai Test XI"></label>
+        <label>Team B<input id="testTeamB" maxlength="40" value="Chennai Test XI"></label>
+      </div>
+      <div class="lab-grid">
+        <label>Format
+          <select id="testFormat">
+            <option value="20">T20 / IPL (20 overs)</option>
+            <option value="50">ODI (50 overs)</option>
+            <option value="10">T10 (10 overs)</option>
+            <option value="5">5-over sprint</option>
+            <option value="90">Test-style single innings (90 overs)</option>
+            <option value="custom">Custom overs</option>
+          </select>
+        </label>
+        <label>Custom overs<input id="testOvers" type="number" min="1" max="120" value="20"></label>
+      </div>
+      <div class="lab-grid">
+        <label>Bias A (-30 to +30)<input id="testBiasA" type="number" min="-30" max="30" value="0"></label>
+        <label>Bias B (-30 to +30)<input id="testBiasB" type="number" min="-30" max="30" value="0"></label>
+      </div>
+      <label>Pitch / wicket
+        <select id="testPitch">
+          <option value="random">Surprise me — random</option>
+          <option value="flat">Flat batting paradise</option>
+          <option value="green">Green seamer</option>
+          <option value="dry">Dry turner</option>
+          <option value="slow">Slow & low</option>
+          <option value="balanced">Balanced surface</option>
+        </select>
+      </label>
+      <div class="lab-actions">
+        <button onclick="generateTestPitch()">Generate Pitch</button>
+        <button class="secondary" onclick="conductTestToss()">Conduct Toss</button>
+      </div>
+      <div id="testConditions" class="lab-box lab-muted">Choose a pitch and toss, or run immediately to generate both.</div>
+    </section>
+
+    <section class="card">
+      <h2>Playing XIs</h2>
+      <p class="lab-muted">Use the IPL seed as a quick test lineup, or type any player names. One player per line. Rating estimates are from DCC game attributes, not official statistics.</p>
+      <div class="lab-actions"><button onclick="loadTestPresets()">Load Sample XIs</button><button class="secondary" onclick="swapTestTeams()">Swap Teams</button></div>
+      <div class="lab-grid">
+        <label>Team A XI<textarea id="testXI_A" rows="12" placeholder="Enter 11 player names…"></textarea></label>
+        <label>Team B XI<textarea id="testXI_B" rows="12" placeholder="Enter 11 player names…"></textarea></label>
+      </div>
+      <div class="lab-actions"><button class="gold" onclick="runTestMatch()">Run Test Match</button><button class="secondary" onclick="clearTestResult()">Clear Results</button></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="section-title"><h2>Test Match Centre</h2><span id="testStatus" class="lab-tag">Ready</span></div>
+    <div id="testScore">Run a simulation to see a match result here.</div>
+    <div id="testReport"></div>
+  </section>
+  <section class="lab-grid" id="testScorecards" hidden>
+    <div class="card"><h2>First Innings</h2><div id="testCardA"></div></div>
+    <div class="card"><h2>Second Innings</h2><div id="testCardB"></div></div>
+  </section>
+  <section class="card">
+    <h2>Ball-by-ball Commentary Highlights</h2>
+    <div id="testCommentary" class="lab-feed"><p class="lab-muted">Commentary appears after the match.</p></div>
+  </section>
+</main>
+<script src="./players.js"></script>
+<script src="./match-lab.js"></script>
+</body>
+</html>
