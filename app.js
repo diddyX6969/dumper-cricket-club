@@ -88,7 +88,8 @@ async function connectNetwork(roomCode,roomKey,isHost){
 
     joinAction.onMessage((data,ctx)=>{if(me.role==="host")handleJoinRequest(data,ctx.userId)});
     replyAction.onMessage((data,ctx)=>{
-      if(me.role==="host"||!data?.ok)return;
+      if(me.role==="host")return;
+      if(!data?.ok){if(data?.error)alert(data.error);return;}
       hostUserId=ctx.userId;state=migrateState(data.state);saveRoomSnapshot();
       if(data.ownerId)setMe({role:"owner",ownerId:data.ownerId,roomCode});
       else setMe({role:"member",ownerId:null,roomCode});
@@ -258,62 +259,56 @@ function roastFor(m){const loser=m.winner?ownerBy(m.winner===m.a?m.b:m.a):null;i
 function adviceFor(m){const loser=m.winner?ownerBy(m.winner===m.a?m.b:m.a):null;if(!loser)return "Build clearer roles for powerplay, middle overs and the death before the next match.";const squad=state.players.filter(p=>p.owner===loser.id&&p.active),bowl=squad.filter(p=>["Bowler","All-rounder"].includes(p.role)).length,bat=squad.filter(p=>["Batter","Wicketkeeper","All-rounder"].includes(p.role)).length;if(bowl<5)return "Improvement for "+loser.team+": recruit more genuine wicket-taking options and stop forcing part-timers into key overs.";if(bat<7)return "Improvement for "+loser.team+": add batting depth and protect the lower order.";return "Improvement for "+loser.team+": optimize the batting order, use bowling matchups better and keep your best players in high-impact roles."}
 function standings(){return state.franchises.map(f=>{let P=0,W=0,L=0,T=0,NR=0,rf=0,ra=0,bf=0,ba=0;state.matches.forEach(m=>{if(m.a!==f.id&&m.b!==f.id)return;P++;const own=m.a===f.id?m.i1:m.i2,opp=m.a===f.id?m.i2:m.i1;rf+=own.runs;ra+=opp.runs;bf+=own.wickets>=10?m.overs*6:own.balls;ba+=opp.wickets>=10?m.overs*6:opp.balls;if(m.tied)T++;else if(m.winner===f.id)W++;else if(m.winner)L++;else NR++});return {...f,P,W,L,T,NR,pts:W*2+T+NR,nrr:bf&&ba?rf/(bf/6)-ra/(ba/6):0}}).sort((a,b)=>b.pts-a.pts||b.nrr-a.nrr)}
 
-function randomSix(){
-  const a=new Uint32Array(1);crypto.getRandomValues(a);return String(100000+(a[0]%900000));
-}
-function generateUserCode(){
-  if(!hostOnly())return;
-  const owner=$("#codeOwnerName").value.trim(),team=$("#codeTeamName").value.trim();
-  if(!owner||!team)return alert("Enter owner name and franchise name.");
-  if(state.franchises.some(x=>x.team.toLowerCase()===team.toLowerCase())||(state.room.userCodes||[]).some(x=>x.active!==false&&x.team.toLowerCase()===team.toLowerCase()))return alert("That franchise name is already assigned.");
-  state.room.userCodes??=[];
-  let c;do{c=randomSix()}while(state.room.userCodes.some(x=>x.code===c));
-  state.room.userCodes.push({code:c,owner,team,active:true,createdAt:Date.now(),franchiseId:null});
-  $("#codeOwnerName").value="";$("#codeTeamName").value="";persist();
-}
-function revokeUserCode(code){
-  if(!hostOnly())return;const r=(state.room.userCodes||[]).find(x=>x.code===String(code));if(!r)return;r.active=false;persist();
-}
-function copyCode(code){navigator.clipboard?.writeText(String(code))}
-function renderUserCodes(){
-  const el=$("#userCodeList");if(!el||!state.room)return;
-  const rows=state.room.userCodes||[];
-  el.innerHTML=rows.length?rows.map(r=>"<div class='codeRow "+(r.active===false?"revoked":"")+"'><div><b>"+esc(r.team)+"</b><span>"+esc(r.owner)+"</span></div><code>"+esc(r.code)+"</code><div class='actions'><button class='secondary' onclick=\"copyCode('"+r.code+"')\">Copy</button>"+(r.active===false?"<span class='muted'>Revoked</span>":"<button class='danger' onclick=\"revokeUserCode('"+r.code+"')\">Revoke</button>")+"</div></div>").join(""):"<span class='muted'>No user codes generated yet.</span>";
-}
-
 function exportLeague(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));a.download=(state.room?.code||"dcc")+"-league.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 function importLeague(e){if(!hostOnly())return;const file=e.target.files?.[0];if(!file)return;file.text().then(t=>{const d=JSON.parse(t);if(!d.players||!d.franchises||!d.matches)throw 0;state=d;persist()}).catch(()=>alert("Invalid DCC league file."))}
-function factoryReset(){if(!hostOnly())return;if(!confirm("Erase/reset this room state from your browser?"))return;localStorage.removeItem("dcc-state-v3");sessionStorage.removeItem("dcc-me");location.reload()}
+function factoryReset(){if(!hostOnly())return;if(!confirm("Delete this room from this creator device? This cannot be undone unless you exported it."))return;const code=state.room?.code;setRoomIndex(getRoomIndex().filter(x=>x.code!==code));if(code)localStorage.removeItem(roomStateKey(code));sessionStorage.removeItem("dcc-me-v6");sessionStorage.removeItem("dcc-active-key-v6");location.reload()}
 
 function render(){
   $("#roomBadge").textContent=state.room?.code||"NO ROOM";
-  $("#logoutBtn")?.classList.toggle("hidden",!["host","admin","owner"].includes(me.role));
-  const isHost=["host","admin"].includes(me.role);
+  $("#logoutBtn")?.classList.toggle("hidden",!["host","owner","member","guest"].includes(me.role));
+  const isHost=me.role==="host";
   $("#adminTab")?.classList.toggle("hidden",!isHost);
   $("#auctionHostControls")?.classList.toggle("hidden",!isHost);
   $("#ownerBidBtn")?.classList.toggle("hidden",me.role!=="owner");
-  if(!state.room)return;
+  $("#memberSetupCard")?.classList.toggle("hidden",me.role!=="member");
+  if(!state.room){renderMyRooms();return}
   $("#roomTitle").textContent=state.room.code;
-  $("#roomInfo").innerHTML="Host: <b>"+esc(state.room.hostName)+"</b><br>Starting purse: <b>"+money(state.room.startPurse)+"</b>";
+  const meta=getRoomIndex().find(x=>x.code===state.room.code);
+  const key=isHost?(meta?.key||activeRoomKey):null;
+  $("#roomInfo").innerHTML="Creator: <b>"+esc(state.room.hostName||"Host")+"</b><br>Starting purse: <b>"+money(state.room.startPurse)+"</b>"+(isHost&&key?"<br>Room Key: <b>"+esc(key)+"</b>":"");
   $("#franchiseList").innerHTML=state.franchises.map(f=>"<div class='teamCard'><div class='row-between'><h4>"+esc(f.team)+"</h4><span class='dot "+(f.online?"on":"")+"'></span></div><div>"+esc(f.owner)+"</div><div class='money'>"+money(f.purse)+"</div></div>").join("")||"<span class='muted'>Waiting for franchise owners.</span>";
   const sold=state.players.filter(p=>p.owner).length;
   $("#leaguePulse").innerHTML="<div><b>"+state.franchises.length+"</b><span>Teams</span></div><div><b>"+sold+"</b><span>Players sold</span></div><div><b>"+state.matches.length+"</b><span>Matches</span></div><div><b>"+state.players.filter(p=>p.active).length+"</b><span>Player pool</span></div><div><b>"+availablePlayers().length+"</b><span>Available</span></div>";
   $("#soldCounter").textContent=sold+" sold • "+availablePlayers().length+" available";
-  renderAuctionSelect();renderAuction();renderSquads();renderTeamSelects();if(["host","admin"].includes(me.role)){renderAdmin();renderUserCodes()}renderStandings();if(state.matches.length)renderMatch(state.matches.at(-1));
-}
-function renderAuction(){const p=currentPlayer();$("#aName").textContent=p?.name||"Choose a player";$("#aMeta").textContent=p?((p.status==="released"?"FREE AGENT • Released by "+p.sourceTeam:p.iplTeam+" • Retained")+" • "+p.role+" • Base "+money(p.basePrice)):"";$("#aBid").textContent=state.auction.bid?money(state.auction.bid):"—";$("#aLeader").textContent=state.auction.leader?(ownerBy(state.auction.leader)?.team||"Unknown")+" leads":"No bids";$("#aTimer").textContent=state.auction.running?Math.max(0,Math.ceil((state.auction.endsAt-Date.now())/1000)):"—";$("#auctionFeed").innerHTML=state.feed.slice(0,100).map(x=>"<div>"+esc(x)+"</div>").join("")||"<span class='muted'>Auction has not started.</span>"}
+  if(isHost){
+    const rid=$("#adminRoomId"),rkey=$("#adminRoomKey");if(rid)rid.textContent=state.room.code;if(rkey)rkey.textContent=key||"—";
+  }
+  renderAuctionSelect();renderAuction();renderSquads();renderTeamSelects();if(isHost)renderAdmin();renderStandings();if(state.matches.length)renderMatch(state.matches.at(-1));
+}function renderAuction(){const p=currentPlayer();$("#aName").textContent=p?.name||"Choose a player";$("#aMeta").textContent=p?((p.status==="released"?"FREE AGENT • Released by "+p.sourceTeam:p.iplTeam+" • Retained")+" • "+p.role+" • Base "+money(p.basePrice)):"";$("#aBid").textContent=state.auction.bid?money(state.auction.bid):"—";$("#aLeader").textContent=state.auction.leader?(ownerBy(state.auction.leader)?.team||"Unknown")+" leads":"No bids";$("#aTimer").textContent=state.auction.running?Math.max(0,Math.ceil((state.auction.endsAt-Date.now())/1000)):"—";$("#auctionFeed").innerHTML=state.feed.slice(0,100).map(x=>"<div>"+esc(x)+"</div>").join("")||"<span class='muted'>Auction has not started.</span>"}
 function renderSquads(){$("#squadGrid").innerHTML=state.franchises.map(f=>{const sq=state.players.filter(p=>p.owner===f.id&&p.active);return "<div class='teamCard'><h4>"+esc(f.team)+"</h4><div class='money'>"+money(f.purse)+" left</div><p>"+sq.length+" players</p><ol>"+sq.map(p=>"<li>"+esc(p.name)+" <span class='muted'>"+money(p.soldPrice)+" • "+p.role+"</span></li>").join("")+"</ol></div>"}).join("")||"<span class='muted'>No squads yet.</span>"}
 function renderTeamSelects(){const opts=state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");for(const id of ["teamA","teamB"]){const el=$("#"+id);if(!el)continue;const old=el.value;el.innerHTML=opts;if([...el.options].some(o=>o.value===old))el.value=old}$("#pitchBox").textContent=state.pitch?state.pitch.name+" — "+state.pitch.desc:"No pitch generated.";$("#tossBox").textContent=state.toss?(ownerBy(state.toss.winner)?.team+" won the toss and chose to "+state.toss.choice):"Toss not conducted."}
 function renderAdmin(){const psel=$("#editPlayer"),oldp=psel.value;psel.innerHTML=state.players.filter(p=>p.active).map(p=>"<option value='"+p.id+"'>"+esc(p.name)+"</option>").join("");if([...psel.options].some(o=>o.value===oldp))psel.value=oldp;const teams="<option value=''>Unassigned</option>"+state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");$("#assignTeam").innerHTML=teams;const tsel=$("#adminTeam"),oldt=tsel.value;tsel.innerHTML=state.franchises.map(f=>"<option value='"+f.id+"'>"+esc(f.team)+"</option>").join("");if([...tsel.options].some(o=>o.value===oldt))tsel.value=oldt;loadPlayerEditor();loadTeamEditor()}
 function renderMatch(m){const a=ownerBy(m.a),b=ownerBy(m.b);if(!a||!b)return;$("#scoreboard").innerHTML="<div class='scoreline'><span>"+esc(a.team)+"</span><b>"+m.i1.runs+"/"+m.i1.wickets+"</b><small>"+(m.i1.balls/6).toFixed(1)+" ov</small></div><div class='scoreline'><span>"+esc(b.team)+"</span><b>"+m.i2.runs+"/"+m.i2.wickets+"</b><small>"+(m.i2.balls/6).toFixed(1)+" ov</small></div><p class='muted'>"+esc(m.pitch)+"</p>";$("#matchResult").textContent=m.tied?"TIED":(ownerBy(m.winner)?.team||"")+" WON";$("#commentary").innerHTML=m.i1.events.concat(m.i2.events).slice(-100).map(x=>"<div>"+esc(x)+"</div>").join("");$("#advice").innerHTML="<div class='notice'><b>Brutal review:</b> "+esc(roastFor(m))+"</div><div class='notice'><b>Improvement:</b> "+esc(adviceFor(m))+"</div>"}
 function renderStandings(){const rows=standings();$("#pointsBody").innerHTML=rows.map((r,i)=>"<tr><td>"+(i+1)+"</td><td>"+esc(r.team)+"</td><td>"+r.P+"</td><td>"+r.W+"</td><td>"+r.L+"</td><td>"+r.T+"</td><td>"+r.NR+"</td><td><b>"+r.pts+"</b></td><td>"+r.nrr.toFixed(3)+"</td></tr>").join("");const sr=Object.entries(state.stats).map(([id,s])=>({p:state.players.find(x=>x.id===id),...s})).filter(x=>x.p);$("#batLeaders").innerHTML=[...sr].sort((a,b)=>b.runs-a.runs).slice(0,10).map((x,i)=>"<p>"+(i+1)+". "+esc(x.p.name)+" — <b>"+x.runs+" runs</b></p>").join("")||"No matches yet.";$("#bowlLeaders").innerHTML=[...sr].sort((a,b)=>b.wickets-a.wickets).slice(0,10).map((x,i)=>"<p>"+(i+1)+". "+esc(x.p.name)+" — <b>"+x.wickets+" wickets</b></p>").join("")||"No matches yet.";$("#mvpLeaders").innerHTML=[...sr].sort((a,b)=>(b.runs+b.wickets*25)-(a.runs+a.wickets*25)).slice(0,10).map((x,i)=>"<p>"+(i+1)+". "+esc(x.p.name)+" — <b>"+(x.runs+x.wickets*25)+" pts</b></p>").join("")||"No matches yet.";$("#bestTeam").innerHTML=rows[0]?"<h2>"+esc(rows[0].team)+"</h2><p>"+rows[0].pts+" points • NRR "+rows[0].nrr.toFixed(3)+"</p>":"No matches yet."}
 
-window.addEventListener("beforeunload",()=>{try{netRoom?.leave();directoryRoom?.leave()}catch{}});
-render();
-if(state.room&&me.role==="host"){
-  enterGame();connectNetwork(state.room.code,true);startDirectory();if(state.auction.running)runTimer();
-}else if(state.room&&me.role==="owner"){
-  enterGame();connectNetwork(state.room.code,false);
-}else if(sessionStorage.getItem("dcc-host-auth")==="1"){
-  setMe({role:"superhost",ownerId:null});$("#landing")?.classList.remove("active");$("#hostHub")?.classList.add("active");startDirectory();renderLiveRooms();
-}
+window.addEventListener("beforeunload",()=>{try{netRoom?.leave()}catch{}});
+renderMyRooms();render();
+
+(async()=>{
+  const roomCode=me.roomCode;
+  if(!roomCode)return;
+  if(me.role==="host"){
+    const meta=getRoomIndex().find(x=>x.code===roomCode),snap=loadRoomSnapshot(roomCode);
+    if(!meta||!snap){setMe({role:null,ownerId:null});return}
+    state=snap;activeRoomKey=meta.key;saveSession();enterGame();
+    await connectNetwork(roomCode,meta.key,true);if(state.auction.running)runTimer();
+    return;
+  }
+  if(["owner","member","guest"].includes(me.role)&&activeRoomKey){
+    state=loadRoomSnapshot(roomCode)||blankState();
+    if(!state.room)state.room={code:roomCode,hostName:"",startPurse:0,createdAt:0};
+    enterGame();
+    const ok=await connectNetwork(roomCode,activeRoomKey,false);if(!ok)return;
+    await joinAction.send({roomCode,keyHash:await sha256(activeRoomKey),memberToken:memberToken(roomCode)});
+  }
+})();
