@@ -361,30 +361,3 @@ footer{text-align:center;padding:30px;color:#728c7a;font-size:12px}
   .price{font-size:40px}
   .logout{padding:7px 9px}
 }
-.big-action{width:100%;padding:15px;font-size:16px}
-.login-choice{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:760px;margin-top:18px}
-.login-tile{min-height:96px;text-align:left;padding:18px;display:flex;flex-direction:column;justify-content:center;gap:7px}
-.login-tile b{font-size:18px;letter-spacing:.04em}
-.login-tile span{font-size:12px;color:#c7d9cc;font-weight:600}
-.login-tile.secondary span{color:#b8c9bd}
-#hostHub h2{margin:4px 0 14px;font-size:38px}
-.room-list{display:flex;flex-direction:column;gap:10px}
-.roomCard{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px;border:1px solid #37664d;border-radius:12px;background:#091c13}
-.roomCard>div{display:flex;flex-direction:column;gap:4px}
-.roomCard b{font-size:16px;color:var(--gold)}
-.roomCard span{font-size:12px;color:var(--muted)}
-.code-list{display:flex;flex-direction:column;gap:9px;margin-top:14px}
-.codeRow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:12px;border:1px solid #37664d;border-radius:11px;background:#091c13}
-.codeRow>div:first-child{display:flex;flex-direction:column;gap:2px}
-.codeRow>div:first-child span{font-size:12px;color:var(--muted)}
-.codeRow code{font-size:22px;letter-spacing:.15em;color:#ffe59a;font-weight:900}
-.codeRow.revoked{opacity:.48}
-.codeRow .actions{margin:0}
-@media(max-width:700px){.login-choice{grid-template-columns:1fr}.roomCard{align-items:stretch;flex-direction:column}.roomCard button{width:100%}.codeRow{grid-template-columns:1fr}.codeRow code{font-size:26px}}
-
-.access-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
-.access-pair>div{padding:14px;border:1px solid #3a694f;border-radius:12px;background:#081a12;display:flex;flex-direction:column;gap:5px}
-.access-pair span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
-.access-pair code{font-size:23px;color:var(--gold);font-weight:950;letter-spacing:.12em}
-#roomKeyInput,#joinCode{text-transform:uppercase;letter-spacing:.08em;font-weight:800}
-@media(max-width:520px){.access-pair{grid-template-columns:1fr}}
