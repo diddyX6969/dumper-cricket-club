@@ -259,7 +259,7 @@ function roastFor(m){const loser=m.winner?ownerBy(m.winner===m.a?m.b:m.a):null;i
 function adviceFor(m){const loser=m.winner?ownerBy(m.winner===m.a?m.b:m.a):null;if(!loser)return "Build clearer roles for powerplay, middle overs and the death before the next match.";const squad=state.players.filter(p=>p.owner===loser.id&&p.active),bowl=squad.filter(p=>["Bowler","All-rounder"].includes(p.role)).length,bat=squad.filter(p=>["Batter","Wicketkeeper","All-rounder"].includes(p.role)).length;if(bowl<5)return "Improvement for "+loser.team+": recruit more genuine wicket-taking options and stop forcing part-timers into key overs.";if(bat<7)return "Improvement for "+loser.team+": add batting depth and protect the lower order.";return "Improvement for "+loser.team+": optimize the batting order, use bowling matchups better and keep your best players in high-impact roles."}
 function standings(){return state.franchises.map(f=>{let P=0,W=0,L=0,T=0,NR=0,rf=0,ra=0,bf=0,ba=0;state.matches.forEach(m=>{if(m.a!==f.id&&m.b!==f.id)return;P++;const own=m.a===f.id?m.i1:m.i2,opp=m.a===f.id?m.i2:m.i1;rf+=own.runs;ra+=opp.runs;bf+=own.wickets>=10?m.overs*6:own.balls;ba+=opp.wickets>=10?m.overs*6:opp.balls;if(m.tied)T++;else if(m.winner===f.id)W++;else if(m.winner)L++;else NR++});return {...f,P,W,L,T,NR,pts:W*2+T+NR,nrr:bf&&ba?rf/(bf/6)-ra/(ba/6):0}}).sort((a,b)=>b.pts-a.pts||b.nrr-a.nrr)}
 
-function exportLeague(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));a.download=(state.room?.code||"dcc")+"-league.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function exportLeague(){if(!hostOnly())return;const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));a.download=(state.room?.code||"dcc")+"-league.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 function importLeague(e){if(!hostOnly())return;const file=e.target.files?.[0];if(!file)return;file.text().then(t=>{const d=JSON.parse(t);if(!d.players||!d.franchises||!d.matches)throw 0;state=d;persist()}).catch(()=>alert("Invalid DCC league file."))}
 function factoryReset(){if(!hostOnly())return;if(!confirm("Delete this room from this creator device? This cannot be undone unless you exported it."))return;const code=state.room?.code;setRoomIndex(getRoomIndex().filter(x=>x.code!==code));if(code)localStorage.removeItem(roomStateKey(code));sessionStorage.removeItem("dcc-me-v6");sessionStorage.removeItem("dcc-active-key-v6");location.reload()}
 
@@ -269,6 +269,8 @@ function render(){
   const isHost=me.role==="host";
   $("#adminTab")?.classList.toggle("hidden",!isHost);
   $("#auctionHostControls")?.classList.toggle("hidden",!isHost);
+  $("#hostLobbyControls")?.classList.toggle("hidden",!isHost);
+  $("#matchHostControls")?.classList.toggle("hidden",!isHost);
   $("#ownerBidBtn")?.classList.toggle("hidden",me.role!=="owner");
   $("#memberSetupCard")?.classList.toggle("hidden",me.role!=="member");
   if(!state.room){renderMyRooms();return}
