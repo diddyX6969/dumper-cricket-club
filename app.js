@@ -44,7 +44,11 @@ function copyText(text){if(navigator.clipboard?.writeText)return navigator.clipb
 function ownCredentials(){const c=state.room?.code;const stored=findCreated(c);return {roomId:c,hostKey:stored?.hostKey||activeHostKey,playerCode:stored?.playerCode||activePlayerCode}}
 function copyPlayerCode(){if(!hostOnly() && !pendingCreated)return;const code=pendingCreated?.playerCode||ownCredentials().playerCode;if(code)copyText(code).catch(()=>alert("Copy the code displayed on the screen."))}
 function copyHostDetails(){if(!hostOnly() && !pendingCreated)return;const creds=pendingCreated||ownCredentials();if(creds.roomId&&creds.hostKey)copyText("Room ID: "+creds.roomId+"\nHost Key: "+creds.hostKey).catch(()=>alert("Copy your host login details manually."))}
-function renderMyRooms(){const box=$("#myRoomsCard"),el=$("#myRooms");if(!box||!el)return;const rows=loadCreated();box.classList.toggle("hidden",!rows.length);el.innerHTML=rows.map(c=>"<div class='saved-room'><div><b>"+esc(c.roomId)+"</b><span>"+new Date(c.createdAt||Date.now()).toLocaleDateString()+"</span></div><button onclick=\"openCreatedRoom('"+c.roomId+"')\">Open Room</button></div>").join("")}
+function renderMyRooms(){
+  const box=$("#myRoomsCard"),el=$("#myRooms");if(!box||!el)return;
+  const rows=loadCreated();box.classList.toggle("hidden",!rows.length);
+  el.innerHTML=rows.map(c=>"<div class='saved-room'><div><b>"+esc(c.roomId)+"</b><span>"+new Date(c.createdAt||Date.now()).toLocaleDateString()+"</span></div><div class='actions'><button onclick=\"openCreatedRoom('"+c.roomId+"')\">Open Room</button><button class='danger' onclick=\"deleteSavedRoom('"+c.roomId+"')\">Delete Room</button></div></div>").join("");
+}
 function showCreatedCredentials(c){pendingCreated=c;$("#createdRoomId").textContent=c.roomId;$("#createdHostKey").textContent=c.hostKey;$("#createdPlayerCode").textContent=c.playerCode;showLoginView("createdBox")}
 function persist(){state.updatedAt=Date.now();if(me.role==="host"){saveLocal();broadcastState()}else if(me.role==="admin"&&hostActions&&hostUserId){hostActions.command.send({type:"admin-state",roomId:state.room?.code,state:publicState()},{target:hostUserId}).catch(console.warn)}render()}
 
