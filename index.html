@@ -23,11 +23,10 @@
 
   <div id="createBox" class="card hidden narrow">
     <h3>Create Room</h3>
-    <label>Host name<input id="hostName" placeholder="Host name"></label>
-    <label>Host ID<input id="hostId" placeholder="admin"></label>
-    <label>Host password<input id="hostPass" type="password"></label>
+    <label>Host name<input id="hostName" placeholder="Your name"></label>
     <label>Starting purse (₹ Cr)<input id="startPurse" type="number" min="1" value="120"></label>
-    <button onclick="createRoom()">Create DCC Room</button>
+    <button class="big-action" onclick="createRoom()">Create Room</button>
+    <p class="muted mini">Room code and host credentials are generated automatically.</p>
   </div>
 
   <div id="joinBox" class="card hidden narrow">
