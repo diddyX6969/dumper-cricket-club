@@ -17,7 +17,7 @@
   <div class="hero card">
     <div class="eyebrow">DCC • LIVE CRICKET AUCTION</div>
     <h2>Create a room. Invite players. Own the auction.</h2>
-    <p>Every room gets its own private host login and one simple player invitation code. This presentation build works in tabs of the same browser without a server.</p>
+    <p>Every room gets its own private host login and one simple player invitation code. Invite up to 20 people to join with one Player Code, from separate phones, browsers, and networks.</p>
     <div class="actions entry-actions">
       <button onclick="showCreate()">Create Room</button>
       <button class="secondary" onclick="showJoin()">Join Room</button>
@@ -75,13 +75,13 @@
   <div id="pendingLoginBox" class="card hidden narrow">
     <div class="eyebrow">PLAYER CONNECTION</div>
     <h3>Waiting for this room</h3>
-    <p id="pendingLoginMessage" class="muted">Your player code is ready. The creator must be online for the very first verification. After that, you can reopen the last synced room while they are offline.</p>
+    <p id="pendingLoginMessage" class="muted">The room server verifies your code. The creator does not need to be online for you to enter.</p>
     <button class="secondary" onclick="backFromPending()">Back to Join Room</button>
   </div>
 
   <div id="myRoomsCard" class="card hidden">
     <h3>Your Created Rooms</h3>
-    <p class="muted mini">Saved on this browser. Open a room to continue hosting it. Demo rooms can be used in multiple tabs of this browser.</p>
+    <p class="muted mini">Creator login details are saved in this browser; room data is held on the online room server.</p>
     <div id="myRooms"></div>
   </div>
 </section>
@@ -241,7 +241,7 @@
 </section>
 </main>
 
-<footer>DCC • GitHub Pages peer-to-peer edition • Unofficial fan game</footer>
-<script>window.DCC_PRESENTATION = true;</script>
-<script src="./players.js"></script><script src="./app.js"></script><script src="./presentation.js"></script>
+<footer>DCC • Online room edition • Unofficial fan game</footer>
+<script>window.DCC_PRESENTATION = false;window.DCC_ONLINE = true;</script>
+<script src="./players.js"></script><script src="./app.js"></script><script src="./presentation.js"></script><script src="./online.js"></script>
 </body></html>
